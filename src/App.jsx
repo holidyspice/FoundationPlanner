@@ -888,14 +888,16 @@ export default function App() {
     }
   }, [webhookUrl, shapes, pan, zoom, fiefMode, fiefPadding, buildingType, fiefType, fiefWidth, fiefHeight, stakesInventory, generateShareUrl, getBuildableAreas, getVertices]);
 
-  const getCollisionVertices = useCallback((shape, cornerStyle) => {
+  const getCollisionVertices = useCallback((shape) => {
     const verts = shape._verts || getVertices(shape);
     if (shape.type === 'corner') {
-      const style = cornerStyle || BUILDING_TYPES[buildingType]?.cornerStyle || 'round';
+      // Use the shape's own building type for collision detection
+      const shapeBuilding = shape.building || 'atreides';
+      const style = BUILDING_TYPES[shapeBuilding]?.cornerStyle || 'round';
       return getCornerCollisionVerts(verts[0], verts[1], verts[2], style);
     }
     return verts;
-  }, [getVertices, getCornerCollisionVerts, buildingType]);
+  }, [getVertices, getCornerCollisionVerts]);
 
   // =====================================================
   // EDGE CALCULATIONS WITH CORRECT OUTWARD NORMALS
@@ -1147,13 +1149,15 @@ export default function App() {
       return true; // Treat as "overlap" to prevent placement
     }
 
-    const cornerStyle = BUILDING_TYPES[buildingType]?.cornerStyle || 'round';
+    // Use current building type for the new shape being placed
+    const newCornerStyle = BUILDING_TYPES[buildingType]?.cornerStyle || 'round';
     const newCollisionVerts = newType === 'corner'
-      ? getCornerCollisionVerts(newVerts[0], newVerts[1], newVerts[2], cornerStyle)
+      ? getCornerCollisionVerts(newVerts[0], newVerts[1], newVerts[2], newCornerStyle)
       : newVerts;
 
     for (const shape of shapes) {
-      const existingVerts = getCollisionVertices(shape, cornerStyle);
+      // Each existing shape uses its own building type for collision
+      const existingVerts = getCollisionVertices(shape);
 
       // Check if any new vertex is strictly inside existing shape
       for (const v of newCollisionVerts) {
