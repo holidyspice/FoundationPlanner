@@ -398,13 +398,15 @@ export default function App() {
   // =====================================================
   // GRID SNAP FUNCTIONS
   // =====================================================
-  // Snap a single coordinate to grid (fixed origin at 0,0)
+  // Snap a single coordinate to grid cell center (so edges align with grid lines)
   const snapToGrid = useCallback((value) => {
     if (!gridEnabled) return value;
-    return Math.round(value / CELL_SIZE) * CELL_SIZE;
+    // Snap to cell center so shape edges align with grid lines
+    const halfCell = CELL_SIZE / 2;
+    return Math.round((value - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
   }, [gridEnabled]);
 
-  // Snap vertices array to grid (snaps the centroid, then offsets all vertices)
+  // Snap vertices array to grid (snaps the centroid to cell center, then offsets all vertices)
   const snapVerticesToGrid = useCallback((verts) => {
     if (!gridEnabled || verts.length === 0) return verts;
 
@@ -412,9 +414,10 @@ export default function App() {
     const cx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
     const cy = verts.reduce((s, v) => s + v.y, 0) / verts.length;
 
-    // Snap centroid to grid
-    const snappedCx = Math.round(cx / CELL_SIZE) * CELL_SIZE;
-    const snappedCy = Math.round(cy / CELL_SIZE) * CELL_SIZE;
+    // Snap centroid to cell center (so edges align with grid lines)
+    const halfCell = CELL_SIZE / 2;
+    const snappedCx = Math.round((cx - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
+    const snappedCy = Math.round((cy - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
 
     // Calculate offset
     const dx = snappedCx - cx;
@@ -1698,9 +1701,10 @@ export default function App() {
         const groupCx = totalX / totalVerts;
         const groupCy = totalY / totalVerts;
 
-        // Snap group centroid to grid
-        const snappedCx = Math.round(groupCx / CELL_SIZE) * CELL_SIZE;
-        const snappedCy = Math.round(groupCy / CELL_SIZE) * CELL_SIZE;
+        // Snap group centroid to cell center (so edges align with grid lines)
+        const halfCell = CELL_SIZE / 2;
+        const snappedCx = Math.round((groupCx - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
+        const snappedCy = Math.round((groupCy - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
 
         // Calculate additional offset needed
         const snapDx = snappedCx - groupCx;
