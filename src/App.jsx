@@ -1689,28 +1689,23 @@ export default function App() {
 
       // Apply grid snap to the entire group if grid is enabled
       if (gridEnabled && transformedShapes.length > 0) {
-        // Calculate group centroid from transformed vertices
-        let totalX = 0, totalY = 0, totalVerts = 0;
-        for (const shape of transformedShapes) {
-          for (const v of shape.newVerts) {
-            totalX += v.x;
-            totalY += v.y;
-            totalVerts++;
-          }
-        }
-        const groupCx = totalX / totalVerts;
-        const groupCy = totalY / totalVerts;
+        // Use the first shape's centroid to determine snap offset
+        // This ensures all shapes maintain their relative grid alignment
+        const firstShape = transformedShapes[0];
+        const firstVerts = firstShape.newVerts;
+        const shapeCx = firstVerts.reduce((s, v) => s + v.x, 0) / firstVerts.length;
+        const shapeCy = firstVerts.reduce((s, v) => s + v.y, 0) / firstVerts.length;
 
-        // Snap group centroid to cell center (so edges align with grid lines)
+        // Snap first shape's centroid to cell center (so edges align with grid lines)
         const halfCell = CELL_SIZE / 2;
-        const snappedCx = Math.round((groupCx - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
-        const snappedCy = Math.round((groupCy - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
+        const snappedCx = Math.round((shapeCx - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
+        const snappedCy = Math.round((shapeCy - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
 
         // Calculate additional offset needed
-        const snapDx = snappedCx - groupCx;
-        const snapDy = snappedCy - groupCy;
+        const snapDx = snappedCx - shapeCx;
+        const snapDy = snappedCy - shapeCy;
 
-        // Apply snap offset to all shapes
+        // Apply snap offset to all shapes in the group
         transformedShapes = transformedShapes.map(shape => ({
           ...shape,
           newVerts: shape.newVerts.map(v => ({ x: v.x + snapDx, y: v.y + snapDy }))
