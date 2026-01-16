@@ -1169,9 +1169,29 @@ export default function App() {
       ? getCornerCollisionVerts(newVerts[0], newVerts[1], newVerts[2], newCornerStyle)
       : newVerts;
 
+    // Calculate centroid of new shape for coincidence check
+    const newCx = newVerts.reduce((s, v) => s + v.x, 0) / newVerts.length;
+    const newCy = newVerts.reduce((s, v) => s + v.y, 0) / newVerts.length;
+
     for (const shape of shapes) {
       // Each existing shape uses its own building type for collision
       const existingVerts = getCollisionVertices(shape);
+
+      // Check for nearly coincident shapes (same position)
+      // This catches the case where shapes overlap exactly and vertices lie on edges
+      const existingCx = existingVerts.reduce((s, v) => s + v.x, 0) / existingVerts.length;
+      const existingCy = existingVerts.reduce((s, v) => s + v.y, 0) / existingVerts.length;
+      const centroidDist = Math.hypot(newCx - existingCx, newCy - existingCy);
+      if (centroidDist < SHAPE_SIZE * 0.5) {
+        // Centroids are close - check if any vertices are nearly coincident
+        for (const nv of newVerts) {
+          for (const ev of (shape._verts || [])) {
+            if (Math.hypot(nv.x - ev.x, nv.y - ev.y) < EDGE_TOLERANCE * 2) {
+              return true; // Vertices nearly coincident = overlapping shape
+            }
+          }
+        }
+      }
 
       // Check if any new vertex is strictly inside existing shape
       for (const v of newCollisionVerts) {
