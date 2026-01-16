@@ -98,6 +98,18 @@ export default function App() {
   const [sendingToDiscord, setSendingToDiscord] = useState(false);
   const [discordSent, setDiscordSent] = useState(false);
 
+  // Lock mode state
+  const [isLocked, setIsLocked] = useState(false);
+  const [hoveredGroup, setHoveredGroup] = useState([]); // IDs of shapes in hovered group
+  const [isDraggingGroup, setIsDraggingGroup] = useState(false);
+  const [draggedGroupIds, setDraggedGroupIds] = useState([]);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+  const [isRotatingGroup, setIsRotatingGroup] = useState(false);
+  const [groupRotationAngle, setGroupRotationAngle] = useState(0);
+  const [groupRotationCenter, setGroupRotationCenter] = useState({ x: 0, y: 0 });
+  const [originalGroupPositions, setOriginalGroupPositions] = useState([]);
+
   // =====================================================
   // KEYBOARD SHORTCUTS
   // =====================================================
@@ -674,6 +686,98 @@ export default function App() {
     return localVerts.map(v => ({
       x: x + v.x * Math.cos(rad) - v.y * Math.sin(rad),
       y: y + v.x * Math.sin(rad) + v.y * Math.cos(rad),
+    }));
+  }, []);
+
+  // =====================================================
+  // CONNECTED GROUP DETECTION (for lock mode)
+  // =====================================================
+
+  // Check if two shapes share an edge (not just a point)
+  const shapesShareEdge = useCallback((shape1, shape2) => {
+    const verts1 = shape1._verts || getVertices(shape1);
+    const verts2 = shape2._verts || getVertices(shape2);
+    const tolerance = EDGE_TOLERANCE * 2;
+
+    // For each edge of shape1, check if it overlaps with any edge of shape2
+    for (let i = 0; i < verts1.length; i++) {
+      const a1 = verts1[i];
+      const a2 = verts1[(i + 1) % verts1.length];
+
+      for (let j = 0; j < verts2.length; j++) {
+        const b1 = verts2[j];
+        const b2 = verts2[(j + 1) % verts2.length];
+
+        // Check if edges share at least 2 points (endpoints match within tolerance)
+        const a1MatchesB1 = Math.hypot(a1.x - b1.x, a1.y - b1.y) < tolerance;
+        const a1MatchesB2 = Math.hypot(a1.x - b2.x, a1.y - b2.y) < tolerance;
+        const a2MatchesB1 = Math.hypot(a2.x - b1.x, a2.y - b1.y) < tolerance;
+        const a2MatchesB2 = Math.hypot(a2.x - b2.x, a2.y - b2.y) < tolerance;
+
+        // Edges share if endpoints match (in either direction)
+        if ((a1MatchesB1 && a2MatchesB2) || (a1MatchesB2 && a2MatchesB1)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }, [getVertices]);
+
+  // Find all shapes connected to a given shape (flood-fill)
+  const findConnectedGroup = useCallback((startShape) => {
+    const group = new Set([startShape.id]);
+    const queue = [startShape];
+
+    while (queue.length > 0) {
+      const current = queue.shift();
+
+      for (const other of shapes) {
+        if (group.has(other.id)) continue;
+
+        if (shapesShareEdge(current, other)) {
+          group.add(other.id);
+          queue.push(other);
+        }
+      }
+    }
+
+    return Array.from(group);
+  }, [shapes, shapesShareEdge]);
+
+  // Get shapes by their IDs
+  const getShapesByIds = useCallback((ids) => {
+    return shapes.filter(s => ids.includes(s.id));
+  }, [shapes]);
+
+  // Calculate centroid of a group of shapes
+  const getGroupCentroid = useCallback((groupShapes) => {
+    if (groupShapes.length === 0) return { x: 0, y: 0 };
+
+    let totalX = 0, totalY = 0, totalVerts = 0;
+    for (const shape of groupShapes) {
+      const verts = shape._verts || getVertices(shape);
+      for (const v of verts) {
+        totalX += v.x;
+        totalY += v.y;
+        totalVerts++;
+      }
+    }
+    return { x: totalX / totalVerts, y: totalY / totalVerts };
+  }, [getVertices]);
+
+  // Transform vertices by offset (for dragging)
+  const offsetVertices = useCallback((verts, dx, dy) => {
+    return verts.map(v => ({ x: v.x + dx, y: v.y + dy }));
+  }, []);
+
+  // Rotate vertices around a center point
+  const rotateVertsAroundPoint = useCallback((verts, cx, cy, angleDeg) => {
+    const rad = (angleDeg * Math.PI) / 180;
+    const cos = Math.cos(rad);
+    const sin = Math.sin(rad);
+    return verts.map(v => ({
+      x: cx + (v.x - cx) * cos - (v.y - cy) * sin,
+      y: cy + (v.x - cx) * sin + (v.y - cy) * cos,
     }));
   }, []);
 
@@ -1269,6 +1373,38 @@ export default function App() {
       return;
     }
 
+    const { x: px, y: py } = screenToWorld(screenX, screenY);
+
+    // Lock mode handling
+    if (isLocked) {
+      // Handle group dragging
+      if (isDraggingGroup && !isRotatingGroup) {
+        const dx = px - dragStart.x;
+        const dy = py - dragStart.y;
+        setDragOffset({ x: dx, y: dy });
+        return;
+      }
+
+      // Handle group rotation
+      if (isRotatingGroup) {
+        const deltaX = screenX - rotationStartX;
+        const newAngle = deltaX * 0.5; // 0.5 degrees per pixel
+        setGroupRotationAngle(newAngle);
+        return;
+      }
+
+      // Update hovered group
+      const shape = findShapeAtPoint(px, py);
+      if (shape) {
+        const groupIds = findConnectedGroup(shape);
+        setHoveredGroup(groupIds);
+      } else {
+        setHoveredGroup([]);
+      }
+      setHoverInfo(null);
+      return;
+    }
+
     // Handle rotation mode - update angle based on horizontal drag
     if (isRotating && baseVertices) {
       const deltaX = screenX - rotationStartX;
@@ -1277,7 +1413,6 @@ export default function App() {
       return;
     }
 
-    const { x: px, y: py } = screenToWorld(screenX, screenY);
     const { edge, distance } = findClosestEdge(px, py);
 
     let leftVerts, rightVerts;
@@ -1291,7 +1426,7 @@ export default function App() {
       rightVerts = calculateSnappedVertices(edge, rightClickShape, px, py);
       setHoverInfo({ freePlace: false, edge, leftVerts, rightVerts });
     }
-  }, [findClosestEdge, calculateSnappedVertices, screenToWorld, isPanning, panStart, isRotating, baseVertices, rotationStartX, leftClickShape, rightClickShape, getFreeVertices]);
+  }, [findClosestEdge, calculateSnappedVertices, screenToWorld, isPanning, panStart, isRotating, baseVertices, rotationStartX, leftClickShape, rightClickShape, getFreeVertices, isLocked, isDraggingGroup, isRotatingGroup, dragStart, findShapeAtPoint, findConnectedGroup]);
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();
@@ -1322,8 +1457,49 @@ export default function App() {
       return;
     }
 
-    // Shift+click delete (when shift click is the delete method)
-    if (e.shiftKey && deleteMethod === 'shift' && (e.button === 0 || e.button === 2)) {
+    // Lock mode - handle group dragging and rotation
+    if (isLocked && e.button === 0) {
+      e.preventDefault();
+      const rect = e.currentTarget.getBoundingClientRect();
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+      const { x: px, y: py } = screenToWorld(screenX, screenY);
+
+      const shape = findShapeAtPoint(px, py);
+      if (!shape) return;
+
+      const groupIds = findConnectedGroup(shape);
+      const groupShapes = getShapesByIds(groupIds);
+
+      // Store original positions for potential reset
+      const originals = groupShapes.map(s => ({
+        id: s.id,
+        x: s.x,
+        y: s.y,
+        rotation: s.rotation,
+        _verts: s._verts ? [...s._verts] : null,
+      }));
+      setOriginalGroupPositions(originals);
+      setDraggedGroupIds(groupIds);
+
+      if (e.shiftKey) {
+        // Shift+drag = rotate group
+        const centroid = getGroupCentroid(groupShapes);
+        setGroupRotationCenter(centroid);
+        setIsRotatingGroup(true);
+        setRotationStartX(screenX);
+        setGroupRotationAngle(0);
+      } else {
+        // Normal drag = move group
+        setIsDraggingGroup(true);
+        setDragStart({ x: px, y: py });
+        setDragOffset({ x: 0, y: 0 });
+      }
+      return;
+    }
+
+    // Shift+click delete (when shift click is the delete method) - NOT in lock mode
+    if (!isLocked && e.shiftKey && deleteMethod === 'shift' && (e.button === 0 || e.button === 2)) {
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
       const { x: px, y: py } = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
@@ -1332,8 +1508,8 @@ export default function App() {
       return;
     }
 
-    // Shift+left click for panning (only when delete method is middle mouse)
-    if (e.button === 0 && e.shiftKey && deleteMethod === 'middle') {
+    // Shift+left click for panning (only when delete method is middle mouse) - NOT in lock mode
+    if (!isLocked && e.button === 0 && e.shiftKey && deleteMethod === 'middle') {
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
       setIsPanning(true);
@@ -1354,8 +1530,8 @@ export default function App() {
       }
     }
 
-    // Start rotation mode on left or right click
-    if (e.button === 0 || e.button === 2) {
+    // Start rotation mode on left or right click (NOT in lock mode)
+    if (!isLocked && (e.button === 0 || e.button === 2)) {
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
       const screenX = e.clientX - rect.left;
@@ -1378,14 +1554,67 @@ export default function App() {
       setBaseVertices(verts);
       setRotationShapeType(shapeType);
     }
-  }, [pan, isRotating, rotatingButton, screenToWorld, findClosestEdge, calculateSnappedVertices, leftClickShape, rightClickShape, getFreeVertices, deleteMethod, findShapeAtPoint]);
+  }, [pan, isRotating, rotatingButton, screenToWorld, findClosestEdge, calculateSnappedVertices, leftClickShape, rightClickShape, getFreeVertices, deleteMethod, findShapeAtPoint, isLocked, findConnectedGroup, getShapesByIds, getGroupCentroid]);
+
+  // Check if transformed group shapes overlap with any shapes outside the group
+  const checkGroupOverlap = useCallback((transformedShapes, groupIds) => {
+    const nonGroupShapes = shapes.filter(s => !groupIds.includes(s.id));
+
+    for (const transformed of transformedShapes) {
+      const newVerts = transformed.newVerts;
+      const shapeBuilding = transformed.building || 'atreides';
+      const cornerStyle = BUILDING_TYPES[shapeBuilding]?.cornerStyle || 'round';
+      const newCollisionVerts = transformed.type === 'corner'
+        ? getCornerCollisionVerts(newVerts[0], newVerts[1], newVerts[2], cornerStyle)
+        : newVerts;
+
+      for (const other of nonGroupShapes) {
+        const existingVerts = getCollisionVertices(other);
+
+        // Check vertex containment
+        for (const v of newCollisionVerts) {
+          if (pointStrictlyInPolygon(v.x, v.y, existingVerts)) return true;
+        }
+        for (const v of existingVerts) {
+          if (pointStrictlyInPolygon(v.x, v.y, newCollisionVerts)) return true;
+        }
+
+        // Check edge intersections
+        for (let i = 0; i < newCollisionVerts.length; i++) {
+          const a1 = newCollisionVerts[i];
+          const a2 = newCollisionVerts[(i + 1) % newCollisionVerts.length];
+          for (let j = 0; j < existingVerts.length; j++) {
+            const b1 = existingVerts[j];
+            const b2 = existingVerts[(j + 1) % existingVerts.length];
+            if (segmentsIntersect(a1, a2, b1, b2)) return true;
+          }
+        }
+
+        // Check for coincident shapes
+        const newCx = newVerts.reduce((s, v) => s + v.x, 0) / newVerts.length;
+        const newCy = newVerts.reduce((s, v) => s + v.y, 0) / newVerts.length;
+        const existingCx = existingVerts.reduce((s, v) => s + v.x, 0) / existingVerts.length;
+        const existingCy = existingVerts.reduce((s, v) => s + v.y, 0) / existingVerts.length;
+        if (Math.hypot(newCx - existingCx, newCy - existingCy) < SHAPE_SIZE * 0.5) {
+          for (const nv of newVerts) {
+            for (const ev of (other._verts || [])) {
+              if (Math.hypot(nv.x - ev.x, nv.y - ev.y) < EDGE_TOLERANCE * 2) {
+                return true;
+              }
+            }
+          }
+        }
+      }
+    }
+    return false;
+  }, [shapes, getCollisionVertices, getCornerCollisionVerts, pointStrictlyInPolygon, segmentsIntersect]);
 
   const handleMouseUp = useCallback((e) => {
     // Handle middle mouse button release
     if (e.button === 1) {
       setIsPanning(false);
-      // If minimal movement, treat as click for delete (when delete method is middle)
-      if (middleMouseStart && deleteMethod === 'middle') {
+      // If minimal movement, treat as click for delete (when delete method is middle) - NOT in lock mode
+      if (!isLocked && middleMouseStart && deleteMethod === 'middle') {
         const rect = e.currentTarget.getBoundingClientRect();
         const endX = e.clientX - rect.left;
         const endY = e.clientY - rect.top;
@@ -1403,7 +1632,67 @@ export default function App() {
 
     setIsPanning(false);
 
-    // Place shape on release if in rotation mode
+    // Handle lock mode group operations
+    if (isLocked && (isDraggingGroup || isRotatingGroup) && draggedGroupIds.length > 0) {
+      const groupShapes = getShapesByIds(draggedGroupIds);
+
+      // Calculate transformed vertices for each shape in the group
+      const transformedShapes = groupShapes.map(shape => {
+        const verts = shape._verts || getVertices(shape);
+        let newVerts;
+
+        if (isRotatingGroup) {
+          // Rotate around group centroid
+          newVerts = rotateVertsAroundPoint(verts, groupRotationCenter.x, groupRotationCenter.y, groupRotationAngle);
+        } else {
+          // Translate by drag offset
+          newVerts = offsetVertices(verts, dragOffset.x, dragOffset.y);
+        }
+
+        return { ...shape, newVerts };
+      });
+
+      // Check if new positions are valid (no overlap with non-group shapes)
+      const hasOverlap = checkGroupOverlap(transformedShapes, draggedGroupIds);
+
+      if (!hasOverlap) {
+        // Apply the transformation
+        setShapes(prev => prev.map(shape => {
+          if (!draggedGroupIds.includes(shape.id)) return shape;
+
+          const verts = shape._verts || getVertices(shape);
+          let newVerts;
+
+          if (isRotatingGroup) {
+            newVerts = rotateVertsAroundPoint(verts, groupRotationCenter.x, groupRotationCenter.y, groupRotationAngle);
+          } else {
+            newVerts = offsetVertices(verts, dragOffset.x, dragOffset.y);
+          }
+
+          // Recalculate center and rotation from new vertices
+          const cx = newVerts.reduce((s, v) => s + v.x, 0) / newVerts.length;
+          const cy = newVerts.reduce((s, v) => s + v.y, 0) / newVerts.length;
+
+          let newRotation = shape.rotation;
+          if (isRotatingGroup) {
+            newRotation = shape.rotation + groupRotationAngle;
+          }
+
+          return { ...shape, x: cx, y: cy, rotation: newRotation, _verts: newVerts };
+        }));
+      }
+
+      // Reset group dragging state
+      setIsDraggingGroup(false);
+      setIsRotatingGroup(false);
+      setDraggedGroupIds([]);
+      setDragOffset({ x: 0, y: 0 });
+      setGroupRotationAngle(0);
+      setOriginalGroupPositions([]);
+      return;
+    }
+
+    // Place shape on release if in rotation mode (not lock mode)
     if (isRotating && baseVertices) {
       const releasedButton = e.button === 0 ? 'left' : 'right';
       if (releasedButton === rotatingButton) {
@@ -1417,7 +1706,7 @@ export default function App() {
       setBaseVertices(null);
       setRotationAngle(0);
     }
-  }, [isRotating, rotatingButton, baseVertices, rotationAngle, rotationShapeType, rotateVertices, checkOverlap, verticesToShape, middleMouseStart, deleteMethod, screenToWorld, findShapeAtPoint, buildingType]);
+  }, [isRotating, rotatingButton, baseVertices, rotationAngle, rotationShapeType, rotateVertices, checkOverlap, verticesToShape, middleMouseStart, deleteMethod, screenToWorld, findShapeAtPoint, buildingType, isLocked, isDraggingGroup, isRotatingGroup, draggedGroupIds, dragOffset, groupRotationAngle, groupRotationCenter, getShapesByIds, getVertices, offsetVertices, rotateVertsAroundPoint, checkGroupOverlap]);
 
   const handleClear = () => {
     setShapes([]);
@@ -1560,16 +1849,104 @@ export default function App() {
 
   const renderShapes = () => {
     return shapes.map(shape => {
+      // Skip rendering shapes that are being dragged/rotated (they'll be rendered as preview)
+      if ((isDraggingGroup || isRotatingGroup) && draggedGroupIds.includes(shape.id)) {
+        return null;
+      }
+
       const verts = shape._verts || getVertices(shape);
       const shapeBuilding = shape.building || 'atreides';
       const cornerStyle = BUILDING_TYPES[shapeBuilding]?.cornerStyle || 'round';
       const colors = COLOR_SCHEMES[shapeBuilding]?.[shape.type] || COLOR_SCHEMES.atreides[shape.type];
-      return renderPolygon(verts, colors.fill, '#0f172a', shape.id, 1, false, shape.type, cornerStyle);
+
+      // Highlight if part of hovered group in lock mode
+      const isHovered = isLocked && hoveredGroup.includes(shape.id) && !isDraggingGroup && !isRotatingGroup;
+      const strokeColor = isHovered ? '#fbbf24' : '#0f172a';
+      const strokeWidth = isHovered ? 3 : 1.5;
+
+      return (
+        <g key={shape.id}>
+          {renderPolygon(verts, colors.fill, strokeColor, shape.id, 1, false, shape.type, cornerStyle)}
+          {isHovered && (
+            <polygon
+              points={verts.map(v => `${v.x},${v.y}`).join(' ')}
+              fill="none"
+              stroke="#fbbf24"
+              strokeWidth={strokeWidth}
+              style={{ pointerEvents: 'none' }}
+            />
+          )}
+        </g>
+      );
     });
+  };
+
+  // Render group being dragged or rotated
+  const renderGroupPreview = () => {
+    if (!isLocked || (!isDraggingGroup && !isRotatingGroup) || draggedGroupIds.length === 0) {
+      return null;
+    }
+
+    const groupShapes = getShapesByIds(draggedGroupIds);
+
+    // Calculate transformed shapes and check for overlap
+    const transformedShapes = groupShapes.map(shape => {
+      const verts = shape._verts || getVertices(shape);
+      let newVerts;
+
+      if (isRotatingGroup) {
+        newVerts = rotateVertsAroundPoint(verts, groupRotationCenter.x, groupRotationCenter.y, groupRotationAngle);
+      } else {
+        newVerts = offsetVertices(verts, dragOffset.x, dragOffset.y);
+      }
+
+      return { ...shape, newVerts };
+    });
+
+    const hasOverlap = checkGroupOverlap(transformedShapes, draggedGroupIds);
+
+    return (
+      <g>
+        {transformedShapes.map(shape => {
+          const shapeBuilding = shape.building || 'atreides';
+          const cornerStyle = BUILDING_TYPES[shapeBuilding]?.cornerStyle || 'round';
+          const colors = COLOR_SCHEMES[shapeBuilding]?.[shape.type] || COLOR_SCHEMES.atreides[shape.type];
+
+          return renderPolygon(
+            shape.newVerts,
+            hasOverlap ? '#ef4444' : colors.fill,
+            hasOverlap ? '#f87171' : '#fbbf24',
+            `preview-${shape.id}`,
+            0.7,
+            true,
+            shape.type,
+            cornerStyle
+          );
+        })}
+        {isRotatingGroup && (
+          <text
+            x={groupRotationCenter.x}
+            y={groupRotationCenter.y - 30}
+            textAnchor="middle"
+            fill="#fbbf24"
+            fontSize="14"
+            fontWeight="bold"
+            style={{ pointerEvents: 'none' }}
+          >
+            {Math.round(groupRotationAngle)}°
+          </text>
+        )}
+      </g>
+    );
   };
 
   const renderHoverPreview = () => {
     const cornerStyle = BUILDING_TYPES[buildingType]?.cornerStyle || 'round';
+
+    // Show group drag/rotate preview in lock mode
+    if (isLocked && (isDraggingGroup || isRotatingGroup)) {
+      return renderGroupPreview();
+    }
 
     // Show rotating shape preview
     if (isRotating && baseVertices) {
@@ -1847,13 +2224,50 @@ export default function App() {
 
       {/* Instructions bar with Share/Discord on right */}
       <div className="w-full max-w-4xl flex items-center justify-between mb-4 bg-slate-800/50 px-4 py-2 rounded-lg">
-        <p className="text-slate-400 text-sm">
-          <span className="text-slate-400">Hold + Drag</span> Rotate ·
-          <span className="text-slate-400 ml-2">Scroll</span> Zoom ·
-          <span className="text-slate-400 ml-2">Middle Drag</span> Pan ·
-          <span className="text-slate-400 ml-2">Ctrl+Z</span> Undo
-        </p>
+        {isLocked ? (
+          <p className="text-slate-400 text-sm">
+            <span className="text-amber-400 font-medium">Lock Mode:</span>
+            <span className="text-slate-400 ml-2">Drag</span> Move Group ·
+            <span className="text-slate-400 ml-2">Shift+Drag</span> Rotate Group ·
+            <span className="text-slate-400 ml-2">Scroll</span> Zoom ·
+            <span className="text-slate-400 ml-2">Middle Drag</span> Pan
+          </p>
+        ) : (
+          <p className="text-slate-400 text-sm">
+            <span className="text-slate-400">Hold + Drag</span> Rotate ·
+            <span className="text-slate-400 ml-2">Scroll</span> Zoom ·
+            <span className="text-slate-400 ml-2">Middle Drag</span> Pan ·
+            <span className="text-slate-400 ml-2">Ctrl+Z</span> Undo
+          </p>
+        )}
         <div className="flex items-center gap-2">
+          {/* Lock toggle button */}
+          <button
+            onClick={() => {
+              setIsLocked(!isLocked);
+              setHoveredGroup([]);
+              setIsDraggingGroup(false);
+              setIsRotatingGroup(false);
+            }}
+            className={`${isLocked ? 'bg-amber-600 hover:bg-amber-500' : 'bg-slate-700 hover:bg-slate-600'} text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1`}
+            title={isLocked ? 'Unlock to edit shapes' : 'Lock to move groups'}
+          >
+            {isLocked ? (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                Locked
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+                </svg>
+                Unlocked
+              </>
+            )}
+          </button>
           <button onClick={handleCopyLink}
             className={`${linkCopied ? 'bg-green-600' : 'bg-amber-600 hover:bg-amber-500'} text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1`}>
             {linkCopied ? (
