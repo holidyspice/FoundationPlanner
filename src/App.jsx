@@ -18,6 +18,35 @@ const BUILDING_TYPES = {
   choamShelter: { label: 'Choam Shelter', cornerStyle: 'round', material: 'granite', cost: 12 },
   choamFacility: { label: 'Choam Facility', cornerStyle: 'diagonal', material: 'granite', cost: 15 },
 };
+
+// Color schemes for each building type - shades differentiate shape types
+const COLOR_SCHEMES = {
+  atreides: {
+    // Green palette
+    square:   { fill: '#22c55e', stroke: '#4ade80' },  // green-500/400
+    triangle: { fill: '#16a34a', stroke: '#22c55e' },  // green-600/500
+    corner:   { fill: '#15803d', stroke: '#16a34a' },  // green-700/600
+  },
+  harkonnen: {
+    // Red palette
+    square:   { fill: '#ef4444', stroke: '#f87171' },  // red-500/400
+    triangle: { fill: '#dc2626', stroke: '#ef4444' },  // red-600/500
+    corner:   { fill: '#b91c1c', stroke: '#dc2626' },  // red-700/600
+  },
+  choamShelter: {
+    // Beige/tan palette
+    square:   { fill: '#d4a574', stroke: '#e4c9a8' },  // warm beige
+    triangle: { fill: '#c4956a', stroke: '#d4a574' },  // medium beige
+    corner:   { fill: '#b08560', stroke: '#c4956a' },  // darker beige
+  },
+  choamFacility: {
+    // Gray palette
+    square:   { fill: '#6b7280', stroke: '#9ca3af' },  // gray-500/400
+    triangle: { fill: '#4b5563', stroke: '#6b7280' },  // gray-600/500
+    corner:   { fill: '#374151', stroke: '#4b5563' },  // gray-700/600
+  },
+};
+
 const CORNER_STEPS = 3; // Number of steps for Atreides stepped corners
 const DIAGONAL_FLAT_RATIO = 0.27; // Size of small flats on Choam Facility corners (27%)
 
@@ -111,19 +140,33 @@ export default function App() {
             const dirFromCode = ['top', 'bottom', 'left', 'right'];
             const dirFromChar = { t: 'top', b: 'bottom', l: 'left', r: 'right' };
 
+            // Get default building type from state (for backward compatibility)
+            const defaultBuilding = state.b !== undefined
+              ? (typeof state.b === 'number' ? buildingFromCode[state.b] : buildingFromChar[state.b] || 'atreides')
+              : 'atreides';
+
             // Restore shapes from vertex data
             const expandedShapes = state.s.map((s, i) => {
-              let type, verts = [];
+              let type, verts = [], building = defaultBuilding;
 
               if (isUltraCompact) {
-                // Ultra-compact: [typeCode, x1, y1, x2, y2, ...]
+                // Ultra-compact: [typeCode, x1, y1, x2, y2, ...] or [typeCode, buildingCode, x1, y1, ...]
                 type = typeFromCode[s[0]] || 'square';
-                for (let j = 1; j < s.length; j += 2) {
+                let vertStart = 1;
+                // Check if second element is a building code (0-3) and we have odd number of remaining elements
+                if (s.length >= 2 && s[1] >= 0 && s[1] <= 3 && (s.length - 2) % 2 === 0) {
+                  building = buildingFromCode[s[1]] || defaultBuilding;
+                  vertStart = 2;
+                }
+                for (let j = vertStart; j < s.length; j += 2) {
                   verts.push({ x: s[j], y: s[j + 1] });
                 }
               } else {
-                // Compact: {t: 's', v: [x1, y1, x2, y2, ...]}
+                // Compact: {t: 's', v: [x1, y1, x2, y2, ...], b: 'a'}
                 type = typeFromChar[s.t] || 'square';
+                if (s.b !== undefined) {
+                  building = typeof s.b === 'number' ? buildingFromCode[s.b] : buildingFromChar[s.b] || defaultBuilding;
+                }
                 if (s.v && s.v.length >= 4) {
                   for (let j = 0; j < s.v.length; j += 2) {
                     verts.push({ x: s.v[j], y: s.v[j + 1] });
@@ -159,6 +202,7 @@ export default function App() {
                 x: cx,
                 y: cy,
                 rotation,
+                building,
                 _verts: verts,
               };
             });
@@ -222,12 +266,15 @@ export default function App() {
 
   // Compress state for sharing (ultra-compact format)
   const getCompressedState = useCallback(() => {
-    // Ultra-compact shape format: [type, x1, y1, x2, y2, ...] as flat array with integers
+    // Ultra-compact shape format: [type, building, x1, y1, x2, y2, ...] as flat array with integers
     const minShapes = shapes.map(s => {
       const verts = s._verts || [];
-      // First element is type code (0=square, 1=triangle, 2=corner), rest are integer coordinates
+      // First element is type code (0=square, 1=triangle, 2=corner)
+      // Second element is building code (0=atreides, 1=harkonnen, 2=choamShelter, 3=choamFacility)
+      // Rest are integer coordinates
       const typeCode = s.type === 'square' ? 0 : s.type === 'triangle' ? 1 : 2;
-      return [typeCode, ...verts.flatMap(pt => [Math.round(pt.x), Math.round(pt.y)])];
+      const buildingCode = s.building === 'atreides' ? 0 : s.building === 'harkonnen' ? 1 : s.building === 'choamShelter' ? 2 : s.building === 'choamFacility' ? 3 : 0;
+      return [typeCode, buildingCode, ...verts.flatMap(pt => [Math.round(pt.x), Math.round(pt.y)])];
     });
 
     // Minimal claimed areas as arrays [direction, parentId]
@@ -704,10 +751,11 @@ export default function App() {
       }
 
       // Add shapes
-      const cStyle = BUILDING_TYPES[buildingType]?.cornerStyle || 'round';
       for (const shape of shapes) {
         const verts = shape._verts || getVertices(shape);
-        const color = shape.type === 'square' ? '#3b82f6' : shape.type === 'corner' ? '#22c55e' : '#f97316';
+        const shapeBuilding = shape.building || 'atreides';
+        const cStyle = BUILDING_TYPES[shapeBuilding]?.cornerStyle || 'round';
+        const colors = COLOR_SCHEMES[shapeBuilding]?.[shape.type] || COLOR_SCHEMES.atreides[shape.type];
 
         if (shape.type === 'corner') {
           const [corner, end1, end2] = verts;
@@ -737,14 +785,14 @@ export default function App() {
 
           const path = document.createElementNS(svgNS, 'path');
           path.setAttribute('d', pathD);
-          path.setAttribute('fill', color);
+          path.setAttribute('fill', colors.fill);
           path.setAttribute('stroke', '#0f172a');
           path.setAttribute('stroke-width', '1.5');
           g.appendChild(path);
         } else {
           const polygon = document.createElementNS(svgNS, 'polygon');
           polygon.setAttribute('points', verts.map(v => `${v.x},${v.y}`).join(' '));
-          polygon.setAttribute('fill', color);
+          polygon.setAttribute('fill', colors.fill);
           polygon.setAttribute('stroke', '#0f172a');
           polygon.setAttribute('stroke-width', '1.5');
           g.appendChild(polygon);
@@ -1031,7 +1079,7 @@ export default function App() {
     }));
   }, []);
 
-  const verticesToShape = useCallback((verts, shapeType, id) => {
+  const verticesToShape = useCallback((verts, shapeType, id, building) => {
     const cx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
     const cy = verts.reduce((s, v) => s + v.y, 0) / verts.length;
 
@@ -1050,7 +1098,7 @@ export default function App() {
       rotation = (Math.atan2(dy, dx) * 180 / Math.PI) + 90;
     }
 
-    return { id, type: shapeType, x: cx, y: cy, rotation, _verts: verts };
+    return { id, type: shapeType, x: cx, y: cy, rotation, building, _verts: verts };
   }, []);
 
   // =====================================================
@@ -1323,7 +1371,7 @@ export default function App() {
       if (releasedButton === rotatingButton) {
         const rotatedVerts = rotateVertices(baseVertices, rotationAngle);
         if (!checkOverlap(rotatedVerts, rotationShapeType)) {
-          setShapes(prev => [...prev, verticesToShape(rotatedVerts, rotationShapeType, Date.now())]);
+          setShapes(prev => [...prev, verticesToShape(rotatedVerts, rotationShapeType, Date.now(), buildingType)]);
         }
       }
       setIsRotating(false);
@@ -1331,7 +1379,7 @@ export default function App() {
       setBaseVertices(null);
       setRotationAngle(0);
     }
-  }, [isRotating, rotatingButton, baseVertices, rotationAngle, rotationShapeType, rotateVertices, checkOverlap, verticesToShape, middleMouseStart, deleteMethod, screenToWorld, findShapeAtPoint]);
+  }, [isRotating, rotatingButton, baseVertices, rotationAngle, rotationShapeType, rotateVertices, checkOverlap, verticesToShape, middleMouseStart, deleteMethod, screenToWorld, findShapeAtPoint, buildingType]);
 
   const handleClear = () => {
     setShapes([]);
@@ -1473,11 +1521,12 @@ export default function App() {
   };
 
   const renderShapes = () => {
-    const cornerStyle = BUILDING_TYPES[buildingType]?.cornerStyle || 'round';
     return shapes.map(shape => {
       const verts = shape._verts || getVertices(shape);
-      const color = shape.type === 'square' ? '#3b82f6' : shape.type === 'corner' ? '#22c55e' : '#f97316';
-      return renderPolygon(verts, color, '#0f172a', shape.id, 1, false, shape.type, cornerStyle);
+      const shapeBuilding = shape.building || 'atreides';
+      const cornerStyle = BUILDING_TYPES[shapeBuilding]?.cornerStyle || 'round';
+      const colors = COLOR_SCHEMES[shapeBuilding]?.[shape.type] || COLOR_SCHEMES.atreides[shape.type];
+      return renderPolygon(verts, colors.fill, '#0f172a', shape.id, 1, false, shape.type, cornerStyle);
     });
   };
 
@@ -1487,13 +1536,12 @@ export default function App() {
     // Show rotating shape preview
     if (isRotating && baseVertices) {
       const rotatedVerts = rotateVertices(baseVertices, rotationAngle);
-      const color = rotationShapeType === 'square' ? '#3b82f6' : rotationShapeType === 'corner' ? '#22c55e' : '#f97316';
-      const stroke = rotationShapeType === 'square' ? '#60a5fa' : rotationShapeType === 'corner' ? '#4ade80' : '#fb923c';
+      const colors = COLOR_SCHEMES[buildingType]?.[rotationShapeType] || COLOR_SCHEMES.atreides[rotationShapeType];
       const hasOverlap = checkOverlap(rotatedVerts, rotationShapeType);
 
       return (
         <g>
-          {renderPolygon(rotatedVerts, hasOverlap ? '#ef4444' : color, hasOverlap ? '#f87171' : stroke, 'rotating', 0.6, true, rotationShapeType, cornerStyle)}
+          {renderPolygon(rotatedVerts, hasOverlap ? '#ef4444' : colors.fill, hasOverlap ? '#f87171' : colors.stroke, 'rotating', 0.6, true, rotationShapeType, cornerStyle)}
           {rotationShapeType === 'corner' && (
             <circle cx={rotatedVerts[0].x} cy={rotatedVerts[0].y} r={6}
               fill="#fbbf24" stroke="#0f172a" strokeWidth={2} style={{ pointerEvents: 'none' }} />
@@ -1510,11 +1558,9 @@ export default function App() {
     const { freePlace, edge, leftVerts, rightVerts } = hoverInfo;
     const elements = [];
 
-    // Helper to get colors for a shape type
+    // Helper to get colors for a shape type based on current building type
     const getShapeColors = (shapeType) => {
-      if (shapeType === 'square') return { fill: '#3b82f6', stroke: '#60a5fa' };
-      if (shapeType === 'corner') return { fill: '#22c55e', stroke: '#4ade80' };
-      return { fill: '#f97316', stroke: '#fb923c' }; // triangle
+      return COLOR_SCHEMES[buildingType]?.[shapeType] || COLOR_SCHEMES.atreides[shapeType];
     };
 
     if (!freePlace && edge) {
