@@ -802,11 +802,11 @@ export default function App() {
       const canIncludeUrl = shareUrl.length <= 2048;
 
       const embed = {
-        title: canIncludeUrl ? 'Open this design in the planner' : 'Dune Foundation Design',
+        title: canIncludeUrl ? 'Open this design in the planner' : 'Dune Base Design',
         description: descLines.join('\n'),
         color: 0xf59e0b,
         image: { url: 'attachment://design.png' },
-        footer: { text: canIncludeUrl ? 'Dune Foundation Planner' : 'Design too complex for share link - use Copy Link button instead' }
+        footer: { text: canIncludeUrl ? 'Dune: Awakening Base Planner' : 'Design too complex for share link - use Copy Link button instead' }
       };
 
       // Only add URL if it's within Discord's limit
@@ -1747,7 +1747,7 @@ export default function App() {
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-950 p-4 flex flex-col items-center">
       <div className="mb-4 text-center">
         <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
-          Dune Awakening Foundation Planner
+          Dune: Awakening Base Planner
         </h1>
         <p className="text-slate-400 text-base">A <a href="https://www.holidyspice.com" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 underline">Holidy Spice</a> Community Tool</p>
       </div>
@@ -2059,7 +2059,7 @@ export default function App() {
       {/* Footer */}
       <div className="mt-3 text-center">
         <p className="text-slate-500 text-sm">
-          Dune: Awakening Foundation Planner • A <a href="https://www.holidyspice.com" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 underline">Holidy Spice</a> Community Tool
+          Dune: Awakening Base Planner • A <a href="https://www.holidyspice.com" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 underline">Holidy Spice</a> Community Tool
         </p>
       </div>
     </div>
