@@ -698,7 +698,16 @@ export default function App() {
       const sqCount = shapes.filter(s => s.type === 'square').length;
       const triCount = shapes.filter(s => s.type === 'triangle').length;
       const cornCount = shapes.filter(s => s.type === 'corner').length;
-      const totalCost = shapes.length * currentBuilding.cost;
+
+      // Calculate costs per material type
+      const exportMaterialCosts = shapes.reduce((acc, shape) => {
+        const shapeBuilding = BUILDING_TYPES[shape.building] || BUILDING_TYPES.atreides;
+        const material = shapeBuilding.material;
+        acc[material] = (acc[material] || 0) + shapeBuilding.cost;
+        return acc;
+      }, {});
+      const exportPlastoneCost = exportMaterialCosts.plastone || 0;
+      const exportGraniteCost = exportMaterialCosts.granite || 0;
 
       // Create a clean SVG for export
       const svgNS = 'http://www.w3.org/2000/svg';
@@ -834,11 +843,16 @@ export default function App() {
       const formData = new FormData();
 
       // Build description lines
+      const costParts = [];
+      if (exportPlastoneCost > 0) costParts.push(`${exportPlastoneCost.toLocaleString()} plastone`);
+      if (exportGraniteCost > 0) costParts.push(`${exportGraniteCost.toLocaleString()} granite`);
+      const costString = costParts.length > 0 ? costParts.join(' + ') : '0';
+
       const descLines = [
         `**Building Style:** ${currentBuilding.label}`,
         `**Pieces:** ${shapes.length} total`,
         `  • ${sqCount} squares, ${triCount} triangles, ${cornCount} corners`,
-        `**Material Cost:** ${totalCost.toLocaleString()} ${currentBuilding.material}`,
+        `**Material Cost:** ${costString}`,
       ];
       if (fiefMode) {
         const stakesUsed = MAX_STAKES - stakesInventory;
@@ -1791,7 +1805,16 @@ export default function App() {
   const triangleCount = shapes.filter(s => s.type === 'triangle').length;
   const cornerCount = shapes.filter(s => s.type === 'corner').length;
   const currentBuilding = BUILDING_TYPES[buildingType];
-  const totalCost = shapes.length * currentBuilding.cost;
+
+  // Calculate costs per material type based on each shape's building type
+  const materialCosts = shapes.reduce((acc, shape) => {
+    const shapeBuilding = BUILDING_TYPES[shape.building] || BUILDING_TYPES.atreides;
+    const material = shapeBuilding.material;
+    acc[material] = (acc[material] || 0) + shapeBuilding.cost;
+    return acc;
+  }, {});
+  const plastoneCost = materialCosts.plastone || 0;
+  const graniteCost = materialCosts.granite || 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-950 p-4 flex flex-col items-center">
@@ -2101,8 +2124,22 @@ export default function App() {
 
         <div className="bg-slate-800 px-4 py-2 rounded-lg text-sm flex items-center gap-2">
           <span className="text-slate-400">Cost:</span>
-          <span className="text-amber-400 font-bold">{totalCost.toLocaleString()}</span>
-          <span className="text-slate-500">{currentBuilding.material}</span>
+          {plastoneCost > 0 && (
+            <>
+              <span className="text-amber-400 font-bold">{plastoneCost.toLocaleString()}</span>
+              <span className="text-slate-500">plastone</span>
+            </>
+          )}
+          {plastoneCost > 0 && graniteCost > 0 && <span className="text-slate-600">+</span>}
+          {graniteCost > 0 && (
+            <>
+              <span className="text-amber-400 font-bold">{graniteCost.toLocaleString()}</span>
+              <span className="text-slate-500">granite</span>
+            </>
+          )}
+          {plastoneCost === 0 && graniteCost === 0 && (
+            <span className="text-slate-500">0</span>
+          )}
         </div>
       </div>
 
