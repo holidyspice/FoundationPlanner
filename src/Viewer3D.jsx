@@ -133,9 +133,13 @@ function TriangleWall({ start, end, building = 'atreides', floor = 0, side = 0 }
   );
 }
 
-// Flat roof component - positioned using bounding box of vertices
-function FlatRoof({ vertices, building = 'atreides', floor = 1 }) {
+// Flat roof component - looks up vertices from shapes at render time
+function FlatRoof({ shapes, shapeId, shapeIndex, building = 'atreides', floor = 1 }) {
   const color = BUILDING_COLORS[building]?.foundation || BUILDING_COLORS.atreides.foundation;
+
+  // Find the shape by ID or index
+  const shape = shapes.find(s => s.id === shapeId) || shapes[shapeIndex];
+  const vertices = shape?._verts;
 
   // Don't render if no valid vertices
   if (!vertices || vertices.length < 3) {
@@ -343,17 +347,14 @@ export default function Viewer3D({ shapes, buildingType, onBack, walls, setWalls
     setWallSide(0);
   }, [placingWall, selectedWallType, currentFloor, wallSide, wallExistsAt]);
 
-  // Handle roof placement
+  // Handle roof placement - store shape ID reference instead of copying vertices
   const handleAddRoof = useCallback(() => {
-    // For simplicity, add roofs based on all valid foundations
     validShapes.forEach((shape, index) => {
-      const verts = shape._verts || [];
-      if (verts.length >= 3) {
-        // Deep copy vertices to avoid reference issues
-        const vertsCopy = verts.map(v => ({ x: v.x, y: v.y }));
+      if (shape._verts && shape._verts.length >= 3) {
         setRoofs(prev => [...prev, {
           id: `roof-${Date.now()}-${index}`,
-          vertices: vertsCopy,
+          shapeId: shape.id, // Reference to shape instead of copying vertices
+          shapeIndex: index,
           building: shape.building || 'atreides',
           floor: currentFloor + 1,
         }]);
@@ -621,7 +622,9 @@ export default function Viewer3D({ shapes, buildingType, onBack, walls, setWalls
           {roofs.map((roof) => (
             <FlatRoof
               key={roof.id}
-              vertices={roof.vertices}
+              shapes={validShapes}
+              shapeId={roof.shapeId}
+              shapeIndex={roof.shapeIndex}
               building={roof.building}
               floor={roof.floor}
             />
