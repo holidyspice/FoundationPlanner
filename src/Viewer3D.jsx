@@ -133,42 +133,37 @@ function TriangleWall({ start, end, building = 'atreides', floor = 0, side = 0 }
   );
 }
 
-// Flat roof component - uses same pattern as Foundation
+// Flat roof component - positioned using bounding box of vertices
 function FlatRoof({ vertices, building = 'atreides', floor = 1 }) {
   const color = BUILDING_COLORS[building]?.foundation || BUILDING_COLORS.atreides.foundation;
-
-  // Create shape from vertices (same approach as Foundation)
-  const shape = useMemo(() => {
-    const s = new THREE.Shape();
-    if (vertices && vertices.length >= 3) {
-      s.moveTo(vertices[0].x, vertices[0].y);
-      for (let i = 1; i < vertices.length; i++) {
-        s.lineTo(vertices[i].x, vertices[i].y);
-      }
-      s.closePath();
-    }
-    return s;
-  }, [vertices]);
 
   // Don't render if no valid vertices
   if (!vertices || vertices.length < 3) {
     return null;
   }
 
-  const extrudeSettings = {
-    depth: 3,
-    bevelEnabled: false,
-  };
+  // Calculate bounding box of vertices
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity, maxY = -Infinity;
+
+  vertices.forEach(v => {
+    minX = Math.min(minX, v.x);
+    maxX = Math.max(maxX, v.x);
+    minY = Math.min(minY, v.y);
+    maxY = Math.max(maxY, v.y);
+  });
+
+  const centerX = (minX + maxX) / 2;
+  const centerZ = (minY + maxY) / 2; // Y in 2D becomes Z in 3D
+  const width = maxX - minX;
+  const depth = maxY - minY;
 
   const baseHeight = floor * WALL_HEIGHT + FOUNDATION_HEIGHT;
 
-  // Position at [0, baseHeight, 0] - the shape vertices contain absolute coordinates
+  // Use simple box geometry positioned at the center of the foundation
   return (
-    <mesh
-      rotation={[-Math.PI / 2, 0, 0]}
-      position={[0, baseHeight, 0]}
-    >
-      <extrudeGeometry args={[shape, extrudeSettings]} />
+    <mesh position={[centerX, baseHeight + 1.5, centerZ]}>
+      <boxGeometry args={[width, 3, depth]} />
       <meshStandardMaterial color={color} opacity={0.8} transparent />
     </mesh>
   );
