@@ -467,18 +467,12 @@ export default function App() {
     const fiefW = fiefWidth * CELL_SIZE;
     const fiefH = fiefHeight * CELL_SIZE;
 
-    // Main fief area - lower-left corner at grid-aligned position in upper-right quadrant
-    // Snap to grid (CELL_SIZE intervals)
-    const gridAlignedX = Math.ceil(canvasCenter.x / CELL_SIZE) * CELL_SIZE;
-    const gridAlignedY = Math.floor(canvasCenter.y / CELL_SIZE) * CELL_SIZE;
-
-    // Position fief so its lower-left corner is at the grid-aligned center
-    // Lower-left corner of rect at (x, y) with height H is at (x, y + H)
-    // So: fief.x = gridAlignedX, fief.y + fiefH = gridAlignedY
+    // Main fief area - upper-left corner at origin (0, 0)
+    // Fief extends to the right and downward from origin
     const mainFief = {
       id: 'main',
-      x: gridAlignedX,
-      y: gridAlignedY - fiefH,
+      x: 0,
+      y: 0,
       width: fiefW,
       height: fiefH,
     };
