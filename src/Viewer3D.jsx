@@ -57,8 +57,8 @@ function Foundation({ vertices, building = 'atreides', onClick }) {
   );
 }
 
-// Wall piece component
-function Wall({ start, end, height = WALL_HEIGHT, building = 'atreides', floor = 0 }) {
+// Wall piece component with side offset support
+function Wall({ start, end, height = WALL_HEIGHT, building = 'atreides', floor = 0, side = 0 }) {
   const color = BUILDING_COLORS[building]?.wall || BUILDING_COLORS.atreides.wall;
 
   // Calculate wall position and dimensions
@@ -68,9 +68,17 @@ function Wall({ start, end, height = WALL_HEIGHT, building = 'atreides', floor =
   const midY = (start.y + end.y) / 2;
   const baseHeight = floor * WALL_HEIGHT + FOUNDATION_HEIGHT;
 
+  // Calculate perpendicular offset for wall side
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  const perpX = -dy / len;
+  const perpY = dx / len;
+  const offsetAmount = side * 2.5; // Half of wall thickness (5/2)
+
   return (
     <mesh
-      position={[midX, baseHeight + height / 2, midY]}
+      position={[midX + perpX * offsetAmount, baseHeight + height / 2, midY + perpY * offsetAmount]}
       rotation={[0, -angle, 0]}
     >
       <boxGeometry args={[length, height, 5]} />
@@ -79,15 +87,25 @@ function Wall({ start, end, height = WALL_HEIGHT, building = 'atreides', floor =
   );
 }
 
-// Triangle wall (gable) component
-function TriangleWall({ start, end, building = 'atreides', floor = 0 }) {
+// Triangle wall (gable) component - sits ON TOP of wall at given floor
+function TriangleWall({ start, end, building = 'atreides', floor = 0, side = 0 }) {
   const color = BUILDING_COLORS[building]?.wall || BUILDING_COLORS.atreides.wall;
 
   const length = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2));
   const angle = Math.atan2(end.y - start.y, end.x - start.x);
   const midX = (start.x + end.x) / 2;
   const midY = (start.y + end.y) / 2;
-  const baseHeight = floor * WALL_HEIGHT + FOUNDATION_HEIGHT;
+
+  // Triangle sits ON TOP of the wall at this floor, so add WALL_HEIGHT
+  const baseHeight = (floor + 1) * WALL_HEIGHT + FOUNDATION_HEIGHT;
+
+  // Calculate perpendicular offset for wall side
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  const perpX = -dy / len;
+  const perpY = dx / len;
+  const offsetAmount = side * 2.5; // Half of wall thickness (5/2)
 
   // Create triangle shape
   const shape = useMemo(() => {
@@ -106,7 +124,7 @@ function TriangleWall({ start, end, building = 'atreides', floor = 0 }) {
 
   return (
     <mesh
-      position={[midX, baseHeight, midY]}
+      position={[midX + perpX * offsetAmount, baseHeight, midY + perpY * offsetAmount]}
       rotation={[0, -angle, Math.PI / 2]}
     >
       <extrudeGeometry args={[shape, extrudeSettings]} />
@@ -167,6 +185,46 @@ function EdgeHighlight({ start, end, isHovered }) {
   );
 }
 
+// Wall preview component for showing placement before confirming
+function WallPreview({ start, end, height, floor, side, type }) {
+  const length = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.y - start.y, 2));
+  const angle = Math.atan2(end.y - start.y, end.x - start.x);
+  const midX = (start.x + end.x) / 2;
+  const midY = (start.y + end.y) / 2;
+
+  // Calculate perpendicular offset
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  const perpX = -dy / len;
+  const perpY = dx / len;
+  const offsetAmount = side * 2.5;
+
+  if (type === 'triangleWall') {
+    const baseHeight = (floor + 1) * WALL_HEIGHT + FOUNDATION_HEIGHT;
+    return (
+      <mesh
+        position={[midX + perpX * offsetAmount, baseHeight + WALL_HEIGHT / 2, midY + perpY * offsetAmount]}
+        rotation={[0, -angle, Math.PI / 2]}
+      >
+        <coneGeometry args={[length / 2, WALL_HEIGHT, 3]} />
+        <meshStandardMaterial color="#fbbf24" transparent opacity={0.6} />
+      </mesh>
+    );
+  }
+
+  const baseHeight = floor * WALL_HEIGHT + FOUNDATION_HEIGHT;
+  return (
+    <mesh
+      position={[midX + perpX * offsetAmount, baseHeight + height / 2, midY + perpY * offsetAmount]}
+      rotation={[0, -angle, 0]}
+    >
+      <boxGeometry args={[length, height, 5]} />
+      <meshStandardMaterial color="#fbbf24" transparent opacity={0.6} />
+    </mesh>
+  );
+}
+
 // Main 3D Viewer component
 export default function Viewer3D({ shapes, buildingType, onBack }) {
   const [walls, setWalls] = useState([]);
@@ -174,6 +232,10 @@ export default function Viewer3D({ shapes, buildingType, onBack }) {
   const [selectedWallType, setSelectedWallType] = useState('wall'); // 'wall', 'halfWall', 'triangleWall'
   const [currentFloor, setCurrentFloor] = useState(0);
   const [hoveredEdge, setHoveredEdge] = useState(null);
+
+  // Wall placement state - for drag-to-orient
+  const [placingWall, setPlacingWall] = useState(null); // { edge, startX, startY }
+  const [wallSide, setWallSide] = useState(0); // -1, 0, or 1
 
   // Filter to only valid shapes (those with at least 3 vertices)
   const validShapes = useMemo(() => {
@@ -200,22 +262,86 @@ export default function Viewer3D({ shapes, buildingType, onBack }) {
     return edges;
   }, [validShapes]);
 
-  // Handle edge click for wall placement
-  const handleEdgeClick = useCallback((edge) => {
+  // Check if a wall already exists at this edge and floor
+  const wallExistsAt = useCallback((edgeStart, edgeEnd, floor) => {
+    return walls.some(w =>
+      w.floor === floor &&
+      ((w.start.x === edgeStart.x && w.start.y === edgeStart.y &&
+        w.end.x === edgeEnd.x && w.end.y === edgeEnd.y) ||
+       (w.start.x === edgeEnd.x && w.start.y === edgeEnd.y &&
+        w.end.x === edgeStart.x && w.end.y === edgeStart.y))
+    );
+  }, [walls]);
+
+  // Handle pointer down on edge - start wall placement
+  const handleEdgePointerDown = useCallback((edge, event) => {
+    event.stopPropagation();
+    setPlacingWall({
+      edge,
+      startX: event.clientX,
+      startY: event.clientY,
+    });
+    setWallSide(0);
+  }, []);
+
+  // Handle pointer move - update wall side based on drag
+  const handlePointerMove = useCallback((event) => {
+    if (!placingWall) return;
+
+    const deltaX = event.clientX - placingWall.startX;
+    // Determine side based on horizontal drag direction
+    if (Math.abs(deltaX) > 20) {
+      setWallSide(deltaX > 0 ? 1 : -1);
+    } else {
+      setWallSide(0);
+    }
+  }, [placingWall]);
+
+  // Handle pointer up - place the wall
+  const handlePointerUp = useCallback(() => {
+    if (!placingWall) return;
+
+    const edge = placingWall.edge;
     const wallHeight = selectedWallType === 'halfWall' ? HALF_WALL_HEIGHT : WALL_HEIGHT;
+    const newWalls = [];
 
-    const newWall = {
-      id: Date.now(),
-      type: selectedWallType,
-      start: edge.start,
-      end: edge.end,
-      height: wallHeight,
-      building: edge.building,
-      floor: currentFloor,
-    };
+    // Auto-fill: add full walls for all floors below current floor
+    for (let f = 0; f < currentFloor; f++) {
+      if (!wallExistsAt(edge.start, edge.end, f)) {
+        newWalls.push({
+          id: Date.now() + f,
+          type: 'wall',
+          start: edge.start,
+          end: edge.end,
+          height: WALL_HEIGHT,
+          building: edge.building,
+          floor: f,
+          side: wallSide,
+        });
+      }
+    }
 
-    setWalls(prev => [...prev, newWall]);
-  }, [selectedWallType, currentFloor]);
+    // Add the wall at current floor
+    if (!wallExistsAt(edge.start, edge.end, currentFloor)) {
+      newWalls.push({
+        id: Date.now() + currentFloor,
+        type: selectedWallType,
+        start: edge.start,
+        end: edge.end,
+        height: wallHeight,
+        building: edge.building,
+        floor: currentFloor,
+        side: wallSide,
+      });
+    }
+
+    if (newWalls.length > 0) {
+      setWalls(prev => [...prev, ...newWalls]);
+    }
+
+    setPlacingWall(null);
+    setWallSide(0);
+  }, [placingWall, selectedWallType, currentFloor, wallSide, wallExistsAt]);
 
   // Handle roof placement
   const handleAddRoof = useCallback(() => {
@@ -384,10 +510,14 @@ export default function Viewer3D({ shapes, buildingType, onBack }) {
       </div>
 
       {/* 3D Canvas */}
-      <div className="flex-1">
+      <div
+        className="flex-1"
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+      >
         <Canvas shadows>
           <PerspectiveCamera makeDefault position={cameraPosition} />
-          <OrbitControls target={cameraTarget} />
+          <OrbitControls target={cameraTarget} enabled={!placingWall} />
 
           {/* Lighting */}
           <ambientLight intensity={0.5} />
@@ -429,7 +559,7 @@ export default function Viewer3D({ shapes, buildingType, onBack }) {
                 (edge.start.y + edge.end.y) / 2,
               ]}
               rotation={[0, -Math.atan2(edge.end.y - edge.start.y, edge.end.x - edge.start.x), 0]}
-              onClick={() => handleEdgeClick(edge)}
+              onPointerDown={(e) => handleEdgePointerDown(edge, e)}
               onPointerOver={() => setHoveredEdge(edge.id)}
               onPointerOut={() => setHoveredEdge(null)}
             >
@@ -446,6 +576,18 @@ export default function Viewer3D({ shapes, buildingType, onBack }) {
             </mesh>
           ))}
 
+          {/* Wall placement preview */}
+          {placingWall && (
+            <WallPreview
+              start={placingWall.edge.start}
+              end={placingWall.edge.end}
+              height={selectedWallType === 'halfWall' ? HALF_WALL_HEIGHT : WALL_HEIGHT}
+              floor={currentFloor}
+              side={wallSide}
+              type={selectedWallType}
+            />
+          )}
+
           {/* Walls */}
           {walls.map((wall) => {
             if (wall.type === 'triangleWall') {
@@ -456,6 +598,7 @@ export default function Viewer3D({ shapes, buildingType, onBack }) {
                   end={wall.end}
                   building={wall.building}
                   floor={wall.floor}
+                  side={wall.side || 0}
                 />
               );
             }
@@ -467,6 +610,7 @@ export default function Viewer3D({ shapes, buildingType, onBack }) {
                 height={wall.height}
                 building={wall.building}
                 floor={wall.floor}
+                side={wall.side || 0}
               />
             );
           })}
@@ -485,8 +629,8 @@ export default function Viewer3D({ shapes, buildingType, onBack }) {
 
       {/* Instructions */}
       <div className="bg-slate-800/50 px-4 py-2 text-center text-slate-400 text-sm">
-        <span className="text-green-400">Click green edges</span> to place walls |
-        <span className="ml-2">Drag</span> to rotate view |
+        <span className="text-green-400">Click & drag edges</span> to place walls (drag left/right to flip side) |
+        <span className="ml-2">Higher floors auto-fill walls below</span> |
         <span className="ml-2">Scroll</span> to zoom |
         <span className="ml-2">Right-drag</span> to pan
       </div>
