@@ -120,6 +120,10 @@ export default function App() {
   // 3D view mode
   const [show3DView, setShow3DView] = useState(false);
 
+  // 3D walls and roofs state (lifted up so it persists across view switches)
+  const [walls3D, setWalls3D] = useState([]);
+  const [roofs3D, setRoofs3D] = useState([]);
+
   // =====================================================
   // KEYBOARD SHORTCUTS
   // =====================================================
@@ -2403,6 +2407,10 @@ export default function App() {
         shapes={shapes}
         buildingType={buildingType}
         onBack={() => setShow3DView(false)}
+        walls={walls3D}
+        setWalls={setWalls3D}
+        roofs={roofs3D}
+        setRoofs={setRoofs3D}
       />
     );
   }

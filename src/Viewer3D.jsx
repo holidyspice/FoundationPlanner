@@ -226,9 +226,7 @@ function WallPreview({ start, end, height, floor, side, type }) {
 }
 
 // Main 3D Viewer component
-export default function Viewer3D({ shapes, buildingType, onBack }) {
-  const [walls, setWalls] = useState([]);
-  const [roofs, setRoofs] = useState([]);
+export default function Viewer3D({ shapes, buildingType, onBack, walls, setWalls, roofs, setRoofs }) {
   const [selectedWallType, setSelectedWallType] = useState('wall'); // 'wall', 'halfWall', 'triangleWall'
   const [currentFloor, setCurrentFloor] = useState(0);
   const [hoveredEdge, setHoveredEdge] = useState(null);
