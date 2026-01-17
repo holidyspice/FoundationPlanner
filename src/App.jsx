@@ -110,6 +110,11 @@ export default function App() {
   const [groupRotationCenter, setGroupRotationCenter] = useState({ x: 0, y: 0 });
   const [originalGroupPositions, setOriginalGroupPositions] = useState([]);
 
+  // Grid mode state
+  const [gridEnabled, setGridEnabled] = useState(false);
+
+  // Track if current placement is free (not edge-snapped)
+  const [isFreePlacement, setIsFreePlacement] = useState(false);
 
   // =====================================================
   // KEYBOARD SHORTCUTS
@@ -396,6 +401,57 @@ export default function App() {
     x: (screenX - pan.x) / zoom,
     y: (screenY - pan.y) / zoom,
   }), [zoom, pan]);
+
+  // =====================================================
+  // GRID SNAP FUNCTIONS
+  // =====================================================
+  // Snap vertices to grid so shape edges align with grid lines
+  // Grid lines are at 0, 50, 100, ... so centroid should be at 25, 75, 125, ... (cell centers)
+  const snapVerticesToGrid = useCallback((verts) => {
+    if (!gridEnabled || verts.length === 0) return verts;
+
+    // Calculate current centroid
+    const cx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
+    const cy = verts.reduce((s, v) => s + v.y, 0) / verts.length;
+
+    // Snap centroid to cell center so edges align with grid lines
+    const halfCell = CELL_SIZE / 2;
+    const snappedCx = Math.round((cx - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
+    const snappedCy = Math.round((cy - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
+
+    // Calculate offset and apply to all vertices
+    const dx = snappedCx - cx;
+    const dy = snappedCy - cy;
+    return verts.map(v => ({ x: v.x + dx, y: v.y + dy }));
+  }, [gridEnabled]);
+
+  // Snap a group's bounding box to grid lines
+  const snapGroupBoundingBoxToGrid = useCallback((transformedShapes) => {
+    if (!gridEnabled || transformedShapes.length === 0) return transformedShapes;
+
+    // Calculate bounding box of all shapes
+    let minX = Infinity, minY = Infinity;
+    for (const shape of transformedShapes) {
+      for (const v of shape.newVerts) {
+        if (v.x < minX) minX = v.x;
+        if (v.y < minY) minY = v.y;
+      }
+    }
+
+    // Snap the bounding box corner to nearest grid intersection
+    const snappedMinX = Math.round(minX / CELL_SIZE) * CELL_SIZE;
+    const snappedMinY = Math.round(minY / CELL_SIZE) * CELL_SIZE;
+
+    // Calculate offset needed
+    const dx = snappedMinX - minX;
+    const dy = snappedMinY - minY;
+
+    // Apply offset to all shapes
+    return transformedShapes.map(shape => ({
+      ...shape,
+      newVerts: shape.newVerts.map(v => ({ x: v.x + dx, y: v.y + dy }))
+    }));
+  }, [gridEnabled]);
 
   // =====================================================
   // FIEF AREA CALCULATIONS
@@ -1424,15 +1480,21 @@ export default function App() {
     let leftVerts, rightVerts;
 
     if (!edge || distance > SNAP_THRESHOLD) {
+      // Free placement - apply grid snap if enabled
       leftVerts = getFreeVertices(px, py, leftClickShape);
       rightVerts = getFreeVertices(px, py, rightClickShape);
+      if (gridEnabled) {
+        leftVerts = snapVerticesToGrid(leftVerts);
+        rightVerts = snapVerticesToGrid(rightVerts);
+      }
       setHoverInfo({ freePlace: true, x: px, y: py, leftVerts, rightVerts });
     } else {
+      // Edge snap takes priority - no grid snap
       leftVerts = calculateSnappedVertices(edge, leftClickShape, px, py);
       rightVerts = calculateSnappedVertices(edge, rightClickShape, px, py);
       setHoverInfo({ freePlace: false, edge, leftVerts, rightVerts });
     }
-  }, [findClosestEdge, calculateSnappedVertices, screenToWorld, isPanning, panStart, isRotating, baseVertices, rotationStartX, leftClickShape, rightClickShape, getFreeVertices, isLocked, isDraggingGroup, isRotatingGroup, dragStart, findShapeAtPoint, findConnectedGroup]);
+  }, [findClosestEdge, calculateSnappedVertices, screenToWorld, isPanning, panStart, isRotating, baseVertices, rotationStartX, leftClickShape, rightClickShape, getFreeVertices, isLocked, isDraggingGroup, isRotatingGroup, dragStart, findShapeAtPoint, findConnectedGroup, gridEnabled, snapVerticesToGrid]);
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();
@@ -1546,9 +1608,15 @@ export default function App() {
       const { edge, distance } = findClosestEdge(px, py);
 
       let verts;
-      if (!edge || distance > SNAP_THRESHOLD) {
+      const isFree = !edge || distance > SNAP_THRESHOLD;
+      if (isFree) {
         verts = getFreeVertices(px, py, shapeType);
+        // Apply grid snap for free placements
+        if (gridEnabled) {
+          verts = snapVerticesToGrid(verts);
+        }
       } else {
+        // Edge snap takes priority
         verts = calculateSnappedVertices(edge, shapeType, px, py);
       }
 
@@ -1558,8 +1626,9 @@ export default function App() {
       setRotationAngle(0);
       setBaseVertices(verts);
       setRotationShapeType(shapeType);
+      setIsFreePlacement(isFree);
     }
-  }, [pan, isRotating, rotatingButton, screenToWorld, findClosestEdge, calculateSnappedVertices, leftClickShape, rightClickShape, getFreeVertices, findShapeAtPoint, isLocked, findConnectedGroup, getShapesByIds, getGroupCentroid]);
+  }, [pan, isRotating, rotatingButton, screenToWorld, findClosestEdge, calculateSnappedVertices, leftClickShape, rightClickShape, getFreeVertices, findShapeAtPoint, isLocked, findConnectedGroup, getShapesByIds, getGroupCentroid, gridEnabled, snapVerticesToGrid]);
 
   // Check if transformed group shapes overlap with any shapes outside the group
   const checkGroupOverlap = useCallback((transformedShapes, groupIds) => {
@@ -1636,8 +1705,13 @@ export default function App() {
             const { edge, distance } = findClosestEdge(px, py);
             let verts;
             if (!edge || distance > SNAP_THRESHOLD) {
+              // Free placement - apply grid snap if enabled
               verts = getFreeVertices(px, py, middleClickAction);
+              if (gridEnabled) {
+                verts = snapVerticesToGrid(verts);
+              }
             } else {
+              // Edge snap takes priority
               verts = calculateSnappedVertices(edge, middleClickAction, px, py);
             }
             if (!checkOverlap(verts, middleClickAction)) {
@@ -1657,7 +1731,7 @@ export default function App() {
       const groupShapes = getShapesByIds(draggedGroupIds);
 
       // Calculate transformed vertices for each shape in the group
-      const transformedShapes = groupShapes.map(shape => {
+      let transformedShapes = groupShapes.map(shape => {
         const verts = shape._verts || getVertices(shape);
         let newVerts;
 
@@ -1671,6 +1745,11 @@ export default function App() {
 
         return { ...shape, newVerts };
       });
+
+      // Apply bounding box grid snap for dragging (not rotation)
+      if (isDraggingGroup && gridEnabled) {
+        transformedShapes = snapGroupBoundingBoxToGrid(transformedShapes);
+      }
 
       // Check if new positions are valid (no overlap with non-group shapes)
       const hasOverlap = checkGroupOverlap(transformedShapes, draggedGroupIds);
@@ -1722,8 +1801,9 @@ export default function App() {
       setRotatingButton(null);
       setBaseVertices(null);
       setRotationAngle(0);
+      setIsFreePlacement(false);
     }
-  }, [isRotating, rotatingButton, baseVertices, rotationAngle, rotationShapeType, rotateVertices, checkOverlap, verticesToShape, middleMouseStart, middleClickAction, screenToWorld, findShapeAtPoint, buildingType, isLocked, isDraggingGroup, isRotatingGroup, draggedGroupIds, dragOffset, groupRotationAngle, groupRotationCenter, getShapesByIds, getVertices, offsetVertices, rotateVertsAroundPoint, checkGroupOverlap, findClosestEdge, getFreeVertices, calculateSnappedVertices]);
+  }, [isRotating, rotatingButton, baseVertices, rotationAngle, rotationShapeType, rotateVertices, checkOverlap, verticesToShape, middleMouseStart, middleClickAction, screenToWorld, findShapeAtPoint, buildingType, isLocked, isDraggingGroup, isRotatingGroup, draggedGroupIds, dragOffset, groupRotationAngle, groupRotationCenter, getShapesByIds, getVertices, offsetVertices, rotateVertsAroundPoint, checkGroupOverlap, findClosestEdge, getFreeVertices, calculateSnappedVertices, gridEnabled, snapVerticesToGrid, snapGroupBoundingBoxToGrid]);
 
   const handleClear = () => {
     setShapes([]);
@@ -2181,6 +2261,88 @@ export default function App() {
     return <g>{elements}</g>;
   };
 
+  // Render grid lines when grid mode is enabled
+  const renderGrid = () => {
+    if (!gridEnabled) return null;
+
+    const elements = [];
+    // Calculate visible area based on current pan and zoom
+    const viewportWidth = 900;
+    const viewportHeight = 600;
+
+    // Convert viewport bounds to world coordinates with padding
+    const worldMinX = -pan.x / zoom - viewportWidth;
+    const worldMaxX = (viewportWidth - pan.x) / zoom + viewportWidth;
+    const worldMinY = -pan.y / zoom - viewportHeight;
+    const worldMaxY = (viewportHeight - pan.y) / zoom + viewportHeight;
+
+    // Snap to grid boundaries
+    const startX = Math.floor(worldMinX / CELL_SIZE) * CELL_SIZE;
+    const endX = Math.ceil(worldMaxX / CELL_SIZE) * CELL_SIZE;
+    const startY = Math.floor(worldMinY / CELL_SIZE) * CELL_SIZE;
+    const endY = Math.ceil(worldMaxY / CELL_SIZE) * CELL_SIZE;
+
+    // Vertical lines
+    for (let x = startX; x <= endX; x += CELL_SIZE) {
+      elements.push(
+        <line
+          key={`grid-v-${x}`}
+          x1={x}
+          y1={startY}
+          x2={x}
+          y2={endY}
+          stroke="rgba(148, 163, 184, 0.2)"
+          strokeWidth={1 / zoom}
+        />
+      );
+    }
+
+    // Horizontal lines
+    for (let y = startY; y <= endY; y += CELL_SIZE) {
+      elements.push(
+        <line
+          key={`grid-h-${y}`}
+          x1={startX}
+          y1={y}
+          x2={endX}
+          y2={y}
+          stroke="rgba(148, 163, 184, 0.2)"
+          strokeWidth={1 / zoom}
+        />
+      );
+    }
+
+    // Origin marker (slightly brighter lines at 0,0)
+    if (startX <= 0 && endX >= 0) {
+      elements.push(
+        <line
+          key="grid-origin-v"
+          x1={0}
+          y1={startY}
+          x2={0}
+          y2={endY}
+          stroke="rgba(148, 163, 184, 0.4)"
+          strokeWidth={2 / zoom}
+        />
+      );
+    }
+    if (startY <= 0 && endY >= 0) {
+      elements.push(
+        <line
+          key="grid-origin-h"
+          x1={startX}
+          y1={0}
+          x2={endX}
+          y2={0}
+          stroke="rgba(148, 163, 184, 0.4)"
+          strokeWidth={2 / zoom}
+        />
+      );
+    }
+
+    return <g style={{ pointerEvents: 'none' }}>{elements}</g>;
+  };
+
   // Render drop zones for stakes (shown when dragging)
   const renderStakeDropZones = () => {
     if (!fiefMode || !draggingStake) return null;
@@ -2282,6 +2444,15 @@ export default function App() {
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
+        </button>
+
+        {/* Grid toggle button */}
+        <button
+          onClick={() => setGridEnabled(!gridEnabled)}
+          className={`${gridEnabled ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-slate-700 hover:bg-slate-600'} text-white w-8 h-8 rounded-lg text-sm transition-colors flex items-center justify-center`}
+          title={gridEnabled ? 'Disable grid snap' : 'Enable grid snap'}
+        >
+          <span className="font-bold text-base">#</span>
         </button>
 
         {/* Lock toggle button */}
@@ -2495,6 +2666,7 @@ export default function App() {
           <rect width="100%" height="100%" fill="url(#grid)" />
 
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
+            {renderGrid()}
             {renderFiefAreas()}
             {renderStakeDropZones()}
             {renderShapes()}
@@ -2518,6 +2690,9 @@ export default function App() {
       {/* Instructions bar with Share/Discord on right */}
       <div className="w-full max-w-4xl flex items-center justify-between mt-3 bg-slate-800/50 px-4 py-2 rounded-lg">
         <div className="flex items-center gap-3">
+          {gridEnabled && (
+            <span className="text-cyan-400 font-medium text-sm">Grid Snap</span>
+          )}
           {isLocked ? (
             <p className="text-slate-400 text-sm">
               <span className="text-amber-400 font-medium">Lock Mode:</span>
