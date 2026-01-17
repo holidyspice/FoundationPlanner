@@ -17,28 +17,26 @@ const BUILDING_COLORS = {
   choamFacility: { foundation: '#6b7280', wall: '#4b5563' },
 };
 
-// Foundation piece component
+// Foundation piece component - uses ExtrudeGeometry with corrected coordinates
 function Foundation({ vertices, building = 'atreides', onClick }) {
   const color = BUILDING_COLORS[building]?.foundation || BUILDING_COLORS.atreides.foundation;
-
-  // Create shape from vertices
-  const shape = useMemo(() => {
-    const s = new THREE.Shape();
-    // Only create shape if we have valid vertices
-    if (vertices && vertices.length >= 3) {
-      s.moveTo(vertices[0].x, vertices[0].y);
-      for (let i = 1; i < vertices.length; i++) {
-        s.lineTo(vertices[i].x, vertices[i].y);
-      }
-      s.closePath();
-    }
-    return s;
-  }, [vertices]);
 
   // Don't render if no valid vertices
   if (!vertices || vertices.length < 3) {
     return null;
   }
+
+  // Create shape from vertices
+  // Negate Y to match the wall coordinate system (2D Y → 3D +Z after rotation)
+  const shape = useMemo(() => {
+    const s = new THREE.Shape();
+    s.moveTo(vertices[0].x, -vertices[0].y);
+    for (let i = 1; i < vertices.length; i++) {
+      s.lineTo(vertices[i].x, -vertices[i].y);
+    }
+    s.closePath();
+    return s;
+  }, [vertices]);
 
   const extrudeSettings = {
     depth: FOUNDATION_HEIGHT,
