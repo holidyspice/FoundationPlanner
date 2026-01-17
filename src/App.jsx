@@ -2508,11 +2508,6 @@ export default function App() {
           </select>
         </div>
 
-        <button onClick={handleResetView}
-          className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-sm transition-colors">
-          Reset View
-        </button>
-
         {/* Clear button */}
         <button onClick={handleClear} disabled={shapes.length === 0}
           className="bg-red-600/80 hover:bg-red-500 disabled:opacity-40 text-white w-8 h-8 rounded-lg text-sm transition-colors flex items-center justify-center"
@@ -2557,6 +2552,15 @@ export default function App() {
         <div className="bg-slate-800 px-3 py-1.5 rounded-lg text-sm flex items-center gap-2">
           <span className="text-slate-400">Zoom:</span>
           <span className="text-slate-300">{Math.round(zoom * 100)}%</span>
+          {/* Reset View button */}
+          <button onClick={handleResetView}
+            className="bg-slate-700 hover:bg-slate-600 text-white w-6 h-6 rounded flex items-center justify-center ml-1"
+            title="Reset View"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+          </button>
         </div>
       </div>
 
