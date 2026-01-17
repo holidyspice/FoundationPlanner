@@ -2384,95 +2384,6 @@ export default function App() {
         <p className="text-slate-400 text-base">A <a href="https://www.holidyspice.com" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 underline">Holidy Spice</a> Community Tool</p>
       </div>
 
-      {/* Instructions bar with Share/Discord on right */}
-      <div className="w-full max-w-4xl flex items-center justify-between mb-4 bg-slate-800/50 px-4 py-2 rounded-lg">
-        <div className="flex items-center gap-3">
-          {gridEnabled && (
-            <span className="text-cyan-400 font-medium text-sm">Grid Snap</span>
-          )}
-          {isLocked ? (
-            <p className="text-slate-400 text-sm">
-              <span className="text-amber-400 font-medium">Lock Mode:</span>
-              <span className="text-slate-400 ml-2">Drag</span> Move Group ·
-              <span className="text-slate-400 ml-2">Shift+Drag</span> Rotate Group ·
-              <span className="text-slate-400 ml-2">Scroll</span> Zoom ·
-              <span className="text-slate-400 ml-2">Middle Drag</span> Pan
-            </p>
-          ) : (
-            <p className="text-slate-400 text-sm">
-              <span className="text-slate-400">Hold + Drag</span> Rotate ·
-              <span className="text-slate-400 ml-2">Scroll</span> Zoom ·
-              <span className="text-slate-400 ml-2">Middle Drag</span> Pan ·
-              <span className="text-slate-400 ml-2">Ctrl+Z</span> Undo
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={handleCopyLink}
-            className={`${linkCopied ? 'bg-green-600' : 'bg-amber-600 hover:bg-amber-500'} text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1`}>
-            {linkCopied ? (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Copied!
-              </>
-            ) : (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
-                </svg>
-                Share
-              </>
-            )}
-          </button>
-          <button onClick={() => setShowWebhookField(!showWebhookField)}
-            className={`${showWebhookField ? 'bg-indigo-600' : 'bg-slate-700 hover:bg-slate-600'} text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1`}>
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
-            </svg>
-            Discord
-          </button>
-        </div>
-      </div>
-
-      {/* Discord webhook input row */}
-      {showWebhookField && (
-        <div className="flex items-center gap-2 mb-3">
-          <input
-            type="text"
-            value={webhookUrl}
-            onChange={(e) => setWebhookUrl(e.target.value)}
-            placeholder="Paste webhook URL..."
-            className="bg-slate-700 text-white text-sm px-3 py-1.5 rounded-lg border border-slate-600 focus:outline-none focus:border-indigo-500 w-80"
-          />
-          <button
-            onClick={handleSendToDiscord}
-            disabled={!webhookUrl || shapes.length === 0 || sendingToDiscord}
-            className={`${discordSent ? 'bg-green-600' : 'bg-indigo-600 hover:bg-indigo-500'} disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1`}
-          >
-            {sendingToDiscord ? (
-              <>
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                Sending...
-              </>
-            ) : discordSent ? (
-              <>
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Sent!
-              </>
-            ) : (
-              'Send to Discord'
-            )}
-          </button>
-        </div>
-      )}
-
       {/* Controls row: mouse assignments, clear, reset view, zoom */}
       <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
         <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-2">
@@ -2758,6 +2669,95 @@ export default function App() {
         </svg>
         </div>
       </div>
+
+      {/* Instructions bar with Share/Discord on right */}
+      <div className="w-full max-w-4xl flex items-center justify-between mt-3 bg-slate-800/50 px-4 py-2 rounded-lg">
+        <div className="flex items-center gap-3">
+          {gridEnabled && (
+            <span className="text-cyan-400 font-medium text-sm">Grid Snap</span>
+          )}
+          {isLocked ? (
+            <p className="text-slate-400 text-sm">
+              <span className="text-amber-400 font-medium">Lock Mode:</span>
+              <span className="text-slate-400 ml-2">Drag</span> Move Group ·
+              <span className="text-slate-400 ml-2">Shift+Drag</span> Rotate Group ·
+              <span className="text-slate-400 ml-2">Scroll</span> Zoom ·
+              <span className="text-slate-400 ml-2">Middle Drag</span> Pan
+            </p>
+          ) : (
+            <p className="text-slate-400 text-sm">
+              <span className="text-slate-400">Hold + Drag</span> Rotate ·
+              <span className="text-slate-400 ml-2">Scroll</span> Zoom ·
+              <span className="text-slate-400 ml-2">Middle Drag</span> Pan ·
+              <span className="text-slate-400 ml-2">Ctrl+Z</span> Undo
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <button onClick={handleCopyLink}
+            className={`${linkCopied ? 'bg-green-600' : 'bg-amber-600 hover:bg-amber-500'} text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1`}>
+            {linkCopied ? (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Copied!
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" />
+                </svg>
+                Share
+              </>
+            )}
+          </button>
+          <button onClick={() => setShowWebhookField(!showWebhookField)}
+            className={`${showWebhookField ? 'bg-indigo-600' : 'bg-slate-700 hover:bg-slate-600'} text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1`}>
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z"/>
+            </svg>
+            Discord
+          </button>
+        </div>
+      </div>
+
+      {/* Discord webhook input row */}
+      {showWebhookField && (
+        <div className="flex items-center gap-2 mt-2">
+          <input
+            type="text"
+            value={webhookUrl}
+            onChange={(e) => setWebhookUrl(e.target.value)}
+            placeholder="Paste webhook URL..."
+            className="bg-slate-700 text-white text-sm px-3 py-1.5 rounded-lg border border-slate-600 focus:outline-none focus:border-indigo-500 w-80"
+          />
+          <button
+            onClick={handleSendToDiscord}
+            disabled={!webhookUrl || shapes.length === 0 || sendingToDiscord}
+            className={`${discordSent ? 'bg-green-600' : 'bg-indigo-600 hover:bg-indigo-500'} disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1`}
+          >
+            {sendingToDiscord ? (
+              <>
+                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Sending...
+              </>
+            ) : discordSent ? (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Sent!
+              </>
+            ) : (
+              'Send to Discord'
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Stats row below canvas */}
       <div className="mt-3 flex flex-wrap items-center justify-center gap-4">
