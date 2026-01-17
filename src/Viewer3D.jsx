@@ -133,13 +133,14 @@ function TriangleWall({ start, end, building = 'atreides', floor = 0, side = 0 }
   );
 }
 
-// Flat roof component
+// Flat roof component - uses same pattern as Foundation
 function FlatRoof({ vertices, building = 'atreides', floor = 1 }) {
   const color = BUILDING_COLORS[building]?.foundation || BUILDING_COLORS.atreides.foundation;
 
+  // Create shape from vertices (same approach as Foundation)
   const shape = useMemo(() => {
     const s = new THREE.Shape();
-    if (vertices.length > 0) {
+    if (vertices && vertices.length >= 3) {
       s.moveTo(vertices[0].x, vertices[0].y);
       for (let i = 1; i < vertices.length; i++) {
         s.lineTo(vertices[i].x, vertices[i].y);
@@ -149,6 +150,11 @@ function FlatRoof({ vertices, building = 'atreides', floor = 1 }) {
     return s;
   }, [vertices]);
 
+  // Don't render if no valid vertices
+  if (!vertices || vertices.length < 3) {
+    return null;
+  }
+
   const extrudeSettings = {
     depth: 3,
     bevelEnabled: false,
@@ -156,6 +162,7 @@ function FlatRoof({ vertices, building = 'atreides', floor = 1 }) {
 
   const baseHeight = floor * WALL_HEIGHT + FOUNDATION_HEIGHT;
 
+  // Position at [0, baseHeight, 0] - the shape vertices contain absolute coordinates
   return (
     <mesh
       rotation={[-Math.PI / 2, 0, 0]}
@@ -347,15 +354,17 @@ export default function Viewer3D({ shapes, buildingType, onBack, walls, setWalls
     validShapes.forEach((shape, index) => {
       const verts = shape._verts || [];
       if (verts.length >= 3) {
+        // Deep copy vertices to avoid reference issues
+        const vertsCopy = verts.map(v => ({ x: v.x, y: v.y }));
         setRoofs(prev => [...prev, {
           id: `roof-${Date.now()}-${index}`,
-          vertices: verts,
+          vertices: vertsCopy,
           building: shape.building || 'atreides',
           floor: currentFloor + 1,
         }]);
       }
     });
-  }, [validShapes, currentFloor]);
+  }, [validShapes, currentFloor, setRoofs]);
 
   // Calculate camera position based on scene bounds
   const cameraPosition = useMemo(() => {
