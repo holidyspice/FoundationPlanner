@@ -2476,7 +2476,7 @@ export default function App() {
       {/* Controls row: mouse assignments, clear, reset view, zoom */}
       <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
         <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-2">
-          <label className="text-blue-400 text-sm font-medium">Left Click:</label>
+          <label className="text-blue-400 text-sm font-medium">Left:</label>
           <select value={leftClickShape} onChange={(e) => setLeftClickShape(e.target.value)}
             className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-blue-500">
             <option value="square">Square</option>
@@ -2487,7 +2487,7 @@ export default function App() {
         </div>
 
         <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-2">
-          <label className="text-orange-400 text-sm font-medium">Right Click:</label>
+          <label className="text-orange-400 text-sm font-medium">Right:</label>
           <select value={rightClickShape} onChange={(e) => setRightClickShape(e.target.value)}
             className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-orange-500">
             <option value="square">Square</option>
@@ -2498,7 +2498,7 @@ export default function App() {
         </div>
 
         <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-2">
-          <label className="text-purple-400 text-sm font-medium">Middle Mouse:</label>
+          <label className="text-purple-400 text-sm font-medium">Middle:</label>
           <select value={middleClickAction} onChange={(e) => setMiddleClickAction(e.target.value)}
             className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-purple-500">
             <option value="square">Square</option>
