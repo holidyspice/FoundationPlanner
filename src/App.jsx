@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import LZString from 'lz-string';
+import Viewer3D from './Viewer3D';
 
 // =====================================================
 // CONSTANTS
@@ -115,6 +116,9 @@ export default function App() {
 
   // Track if current placement is free (not edge-snapped)
   const [isFreePlacement, setIsFreePlacement] = useState(false);
+
+  // 3D view mode
+  const [show3DView, setShow3DView] = useState(false);
 
   // =====================================================
   // KEYBOARD SHORTCUTS
@@ -2392,6 +2396,17 @@ export default function App() {
   const plastoneCost = materialCosts.plastone || 0;
   const graniteCost = materialCosts.granite || 0;
 
+  // If 3D view is active, render the 3D viewer
+  if (show3DView) {
+    return (
+      <Viewer3D
+        shapes={shapes}
+        buildingType={buildingType}
+        onBack={() => setShow3DView(false)}
+      />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-950 p-4 flex flex-col items-center">
       <div className="mb-4 text-center">
@@ -2475,6 +2490,19 @@ export default function App() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
             </svg>
           )}
+        </button>
+
+        {/* 3D View toggle button */}
+        <button
+          onClick={() => setShow3DView(true)}
+          disabled={shapes.length === 0}
+          className="bg-purple-600 hover:bg-purple-500 disabled:opacity-40 disabled:cursor-not-allowed text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1"
+          title="Open 3D View"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+          3D View
         </button>
 
         <div className="bg-slate-800 px-3 py-1.5 rounded-lg text-sm flex items-center gap-2">
