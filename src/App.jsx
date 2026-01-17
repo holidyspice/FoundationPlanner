@@ -64,9 +64,9 @@ export default function App() {
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [buildingType, setBuildingType] = useState('atreides');
-  const [leftClickShape, setLeftClickShape] = useState('square');
-  const [rightClickShape, setRightClickShape] = useState('triangle');
-  const [deleteMethod, setDeleteMethod] = useState('middle'); // 'middle' or 'shift'
+  const [leftClickShape, setLeftClickShape] = useState('square'); // 'square', 'triangle', 'corner', 'delete'
+  const [rightClickShape, setRightClickShape] = useState('triangle'); // 'square', 'triangle', 'corner', 'delete'
+  const [middleClickAction, setMiddleClickAction] = useState('delete'); // 'square', 'triangle', 'corner', 'delete'
 
   // Rotation mode state
   const [isRotating, setIsRotating] = useState(false);
@@ -150,8 +150,8 @@ export default function App() {
             const typeFromChar = { s: 'square', t: 'triangle', c: 'corner' };
             const buildingFromCode = ['atreides', 'harkonnen', 'choamShelter', 'choamFacility'];
             const buildingFromChar = { a: 'atreides', h: 'harkonnen', cs: 'choamShelter', cf: 'choamFacility' };
-            const shapeFromCode = ['square', 'triangle', 'corner'];
-            const shapeFromChar = { s: 'square', t: 'triangle', c: 'corner' };
+            const shapeFromCode = ['square', 'triangle', 'corner', 'delete'];
+            const shapeFromChar = { s: 'square', t: 'triangle', c: 'corner', d: 'delete' };
             const dirFromCode = ['top', 'bottom', 'left', 'right'];
             const dirFromChar = { t: 'top', b: 'bottom', l: 'left', r: 'right' };
 
@@ -233,8 +233,10 @@ export default function App() {
             if (state.r !== undefined) {
               setRightClickShape(typeof state.r === 'number' ? shapeFromCode[state.r] : shapeFromChar[state.r] || 'triangle');
             }
-            if (state.d !== undefined) {
-              setDeleteMethod(state.d === 1 || state.d === 's' ? 'shift' : 'middle');
+            if (state.m !== undefined) {
+              // New format: middle click action (0=square, 1=triangle, 2=corner, 3=delete)
+              const actionFromCode = ['square', 'triangle', 'corner', 'delete'];
+              setMiddleClickAction(actionFromCode[state.m] || 'delete');
             }
             if (state.fm !== undefined) setFiefMode(state.fm === 1);
             if (state.ft !== undefined) setFiefType(state.ft === 1 || state.ft === 'a' ? 'advanced' : 'basic');
@@ -260,7 +262,7 @@ export default function App() {
             if (state.buildingType) setBuildingType(state.buildingType);
             if (state.leftClickShape) setLeftClickShape(state.leftClickShape);
             if (state.rightClickShape) setRightClickShape(state.rightClickShape);
-            if (state.deleteMethod) setDeleteMethod(state.deleteMethod);
+            if (state.middleClickAction) setMiddleClickAction(state.middleClickAction);
             if (state.fiefMode !== undefined) setFiefMode(state.fiefMode);
             if (state.fiefType) setFiefType(state.fiefType);
             if (state.fiefWidth) setFiefWidth(state.fiefWidth);
@@ -306,9 +308,11 @@ export default function App() {
     if (btCode !== 0) state.b = btCode;
 
     // Only include if different from defaults
-    if (leftClickShape !== 'square') state.l = leftClickShape === 'triangle' ? 1 : 2;
-    if (rightClickShape !== 'triangle') state.r = rightClickShape === 'square' ? 0 : 2;
-    if (deleteMethod !== 'middle') state.d = 1;
+    // Shape codes: 0=square, 1=triangle, 2=corner, 3=delete
+    const shapeToCode = { square: 0, triangle: 1, corner: 2, delete: 3 };
+    if (leftClickShape !== 'square') state.l = shapeToCode[leftClickShape];
+    if (rightClickShape !== 'triangle') state.r = shapeToCode[rightClickShape];
+    if (middleClickAction !== 'delete') state.m = shapeToCode[middleClickAction];
     if (fiefMode) {
       state.fm = 1;
       if (fiefType !== 'basic') state.ft = 1;
@@ -320,7 +324,7 @@ export default function App() {
     }
 
     return LZString.compressToEncodedURIComponent(JSON.stringify(state));
-  }, [shapes, buildingType, leftClickShape, rightClickShape, deleteMethod, fiefMode, fiefType, fiefWidth, fiefHeight, fiefPadding, stakesInventory, claimedAreas]);
+  }, [shapes, buildingType, leftClickShape, rightClickShape, middleClickAction, fiefMode, fiefType, fiefWidth, fiefHeight, fiefPadding, stakesInventory, claimedAreas]);
 
   // Generate and copy share link
   const handleCopyLink = useCallback(() => {
@@ -1533,18 +1537,8 @@ export default function App() {
       return;
     }
 
-    // Shift+click delete (when shift click is the delete method) - NOT in lock mode
-    if (!isLocked && e.shiftKey && deleteMethod === 'shift' && (e.button === 0 || e.button === 2)) {
-      e.preventDefault();
-      const rect = e.currentTarget.getBoundingClientRect();
-      const { x: px, y: py } = screenToWorld(e.clientX - rect.left, e.clientY - rect.top);
-      const shape = findShapeAtPoint(px, py);
-      if (shape) setShapes(prev => prev.filter(s => s.id !== shape.id));
-      return;
-    }
-
-    // Shift+left click for panning (only when delete method is middle mouse) - NOT in lock mode
-    if (!isLocked && e.button === 0 && e.shiftKey && deleteMethod === 'middle') {
+    // Shift+left click for panning - NOT in lock mode
+    if (!isLocked && e.button === 0 && e.shiftKey) {
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
       setIsPanning(true);
@@ -1565,7 +1559,7 @@ export default function App() {
       }
     }
 
-    // Start rotation mode on left or right click (NOT in lock mode)
+    // Handle left or right click (NOT in lock mode)
     if (!isLocked && (e.button === 0 || e.button === 2)) {
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
@@ -1573,6 +1567,15 @@ export default function App() {
       const { x: px, y: py } = screenToWorld(screenX, e.clientY - rect.top);
 
       const shapeType = e.button === 0 ? leftClickShape : rightClickShape;
+
+      // If delete mode, delete shape immediately
+      if (shapeType === 'delete') {
+        const shape = findShapeAtPoint(px, py);
+        if (shape) setShapes(prev => prev.filter(s => s.id !== shape.id));
+        return;
+      }
+
+      // Otherwise, start rotation mode for placing shapes
       const { edge, distance } = findClosestEdge(px, py);
 
       let verts;
@@ -1589,7 +1592,7 @@ export default function App() {
       setBaseVertices(verts);
       setRotationShapeType(shapeType);
     }
-  }, [pan, isRotating, rotatingButton, screenToWorld, findClosestEdge, calculateSnappedVertices, leftClickShape, rightClickShape, getFreeVertices, deleteMethod, findShapeAtPoint, isLocked, findConnectedGroup, getShapesByIds, getGroupCentroid]);
+  }, [pan, isRotating, rotatingButton, screenToWorld, findClosestEdge, calculateSnappedVertices, leftClickShape, rightClickShape, getFreeVertices, findShapeAtPoint, isLocked, findConnectedGroup, getShapesByIds, getGroupCentroid]);
 
   // Check if transformed group shapes overlap with any shapes outside the group
   const checkGroupOverlap = useCallback((transformedShapes, groupIds) => {
@@ -1648,17 +1651,34 @@ export default function App() {
     // Handle middle mouse button release
     if (e.button === 1) {
       setIsPanning(false);
-      // If minimal movement, treat as click for delete (when delete method is middle) - NOT in lock mode
-      if (!isLocked && middleMouseStart && deleteMethod === 'middle') {
+      // If minimal movement, perform middle click action - NOT in lock mode
+      if (!isLocked && middleMouseStart) {
         const rect = e.currentTarget.getBoundingClientRect();
         const endX = e.clientX - rect.left;
         const endY = e.clientY - rect.top;
         const dist = Math.sqrt((endX - middleMouseStart.x) ** 2 + (endY - middleMouseStart.y) ** 2);
         if (dist < 5) {
-          // Treat as click - delete shape
           const { x: px, y: py } = screenToWorld(endX, endY);
-          const shape = findShapeAtPoint(px, py);
-          if (shape) setShapes(prev => prev.filter(s => s.id !== shape.id));
+
+          if (middleClickAction === 'delete') {
+            // Delete shape
+            const shape = findShapeAtPoint(px, py);
+            if (shape) setShapes(prev => prev.filter(s => s.id !== shape.id));
+          } else {
+            // Place shape (square, triangle, or corner)
+            const { edge, distance } = findClosestEdge(px, py);
+            let verts;
+            if (!edge || distance > SNAP_THRESHOLD) {
+              verts = getFreeVertices(px, py, middleClickAction);
+            } else {
+              verts = calculateSnappedVertices(edge, middleClickAction, px, py);
+            }
+            // Apply grid snap if enabled
+            const finalVerts = snapVerticesToGrid(verts);
+            if (!checkOverlap(finalVerts, middleClickAction)) {
+              setShapes(prev => [...prev, verticesToShape(finalVerts, middleClickAction, Date.now(), buildingType)]);
+            }
+          }
         }
       }
       setMiddleMouseStart(null);
@@ -1765,7 +1785,7 @@ export default function App() {
       setBaseVertices(null);
       setRotationAngle(0);
     }
-  }, [isRotating, rotatingButton, baseVertices, rotationAngle, rotationShapeType, rotateVertices, checkOverlap, verticesToShape, middleMouseStart, deleteMethod, screenToWorld, findShapeAtPoint, buildingType, isLocked, isDraggingGroup, isRotatingGroup, draggedGroupIds, dragOffset, groupRotationAngle, groupRotationCenter, getShapesByIds, getVertices, offsetVertices, rotateVertsAroundPoint, checkGroupOverlap, snapVerticesToGrid, gridEnabled]);
+  }, [isRotating, rotatingButton, baseVertices, rotationAngle, rotationShapeType, rotateVertices, checkOverlap, verticesToShape, middleMouseStart, middleClickAction, screenToWorld, findShapeAtPoint, buildingType, isLocked, isDraggingGroup, isRotatingGroup, draggedGroupIds, dragOffset, groupRotationAngle, groupRotationCenter, getShapesByIds, getVertices, offsetVertices, rotateVertsAroundPoint, checkGroupOverlap, snapVerticesToGrid, gridEnabled, findClosestEdge, getFreeVertices, calculateSnappedVertices]);
 
   const handleClear = () => {
     setShapes([]);
@@ -2050,8 +2070,8 @@ export default function App() {
       );
     }
 
-    // Left click preview
-    if (leftVerts && !checkOverlap(leftVerts, leftClickShape)) {
+    // Left click preview (skip if delete mode)
+    if (leftClickShape !== 'delete' && leftVerts && !checkOverlap(leftVerts, leftClickShape)) {
       const leftColors = getShapeColors(leftClickShape);
       elements.push(renderPolygon(leftVerts, leftColors.fill, leftColors.stroke, 'prev-left', 0.4, true, leftClickShape, cornerStyle));
       if (leftClickShape === 'corner') {
@@ -2062,8 +2082,8 @@ export default function App() {
       }
     }
 
-    // Right click preview (only if different from left)
-    if (rightVerts && !checkOverlap(rightVerts, rightClickShape)) {
+    // Right click preview (skip if delete mode)
+    if (rightClickShape !== 'delete' && rightVerts && !checkOverlap(rightVerts, rightClickShape)) {
       const rightColors = getShapeColors(rightClickShape);
       elements.push(renderPolygon(rightVerts, rightColors.fill, rightColors.stroke, 'prev-right', 0.4, true, rightClickShape, cornerStyle));
       if (rightClickShape === 'corner') {
@@ -2462,6 +2482,7 @@ export default function App() {
             <option value="square">Square</option>
             <option value="triangle">Triangle</option>
             <option value="corner">Corner</option>
+            <option value="delete">Delete</option>
           </select>
         </div>
 
@@ -2472,31 +2493,40 @@ export default function App() {
             <option value="square">Square</option>
             <option value="triangle">Triangle</option>
             <option value="corner">Corner</option>
+            <option value="delete">Delete</option>
           </select>
         </div>
 
         <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-2">
-          <label className="text-red-400 text-sm font-medium">Delete:</label>
-          <select value={deleteMethod} onChange={(e) => setDeleteMethod(e.target.value)}
-            className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-red-500">
-            <option value="middle">Middle Mouse</option>
-            <option value="shift">Shift + Click</option>
+          <label className="text-purple-400 text-sm font-medium">Middle Mouse:</label>
+          <select value={middleClickAction} onChange={(e) => setMiddleClickAction(e.target.value)}
+            className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-purple-500">
+            <option value="square">Square</option>
+            <option value="triangle">Triangle</option>
+            <option value="corner">Corner</option>
+            <option value="delete">Delete</option>
           </select>
         </div>
 
-        <button onClick={handleClear} disabled={shapes.length === 0}
-          className="bg-red-600/80 hover:bg-red-500 disabled:opacity-40 text-white px-3 py-1.5 rounded-lg text-sm transition-colors">
-          Clear
-        </button>
         <button onClick={handleResetView}
           className="bg-slate-700 hover:bg-slate-600 text-white px-3 py-1.5 rounded-lg text-sm transition-colors">
           Reset View
         </button>
 
+        {/* Clear button */}
+        <button onClick={handleClear} disabled={shapes.length === 0}
+          className="bg-red-600/80 hover:bg-red-500 disabled:opacity-40 text-white w-8 h-8 rounded-lg text-sm transition-colors flex items-center justify-center"
+          title="Clear all shapes"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+
         {/* Grid toggle button */}
         <button
           onClick={() => setGridEnabled(!gridEnabled)}
-          className={`${gridEnabled ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-slate-700 hover:bg-slate-600'} text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center justify-center`}
+          className={`${gridEnabled ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-slate-700 hover:bg-slate-600'} text-white w-8 h-8 rounded-lg text-sm transition-colors flex items-center justify-center`}
           title={gridEnabled ? 'Disable grid snap' : 'Enable grid snap'}
         >
           <span className="font-bold text-base">#</span>
@@ -2510,7 +2540,7 @@ export default function App() {
             setIsDraggingGroup(false);
             setIsRotatingGroup(false);
           }}
-          className={`${isLocked ? 'bg-amber-600 hover:bg-amber-500' : 'bg-slate-700 hover:bg-slate-600'} text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center justify-center`}
+          className={`${isLocked ? 'bg-amber-600 hover:bg-amber-500' : 'bg-slate-700 hover:bg-slate-600'} text-white w-8 h-8 rounded-lg text-sm transition-colors flex items-center justify-center`}
           title={isLocked ? 'Unlock to edit shapes' : 'Lock to move groups'}
         >
           {isLocked ? (
@@ -2620,28 +2650,56 @@ export default function App() {
               <div className="border-t border-slate-600 pt-2 mt-1">
                 <div className="text-slate-300 font-medium text-sm mb-2">Stakes ({stakesInventory}/{MAX_STAKES})</div>
                 <div className="flex flex-wrap gap-2">
-                  {Array.from({ length: stakesInventory }).map((_, i) => (
-                    <div
-                      key={i}
-                      draggable
-                      onDragStart={handleStakeDragStart}
-                      onDragEnd={handleStakeDragEnd}
-                      className="w-10 h-10 bg-amber-600 hover:bg-amber-500 rounded-lg flex items-center justify-center cursor-grab active:cursor-grabbing transition-colors border-2 border-amber-400"
-                      title="Drag to place stake"
-                    >
-                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                        <path d="M12 2L12 14M12 14L8 10M12 14L16 10" />
-                        <path d="M5 22H19" />
-                        <path d="M12 14V22" />
-                      </svg>
-                    </div>
-                  ))}
-                  {stakesInventory === 0 && (
-                    <div className="text-slate-500 text-xs italic">No stakes left</div>
-                  )}
+                  {Array.from({ length: MAX_STAKES }).map((_, i) => {
+                    const isAvailable = i < stakesInventory;
+                    const usedIndex = i - stakesInventory; // Which claimed area this represents
+                    const claimedArea = !isAvailable ? claimedAreas[usedIndex] : null;
+
+                    if (isAvailable) {
+                      // Available stake - can be dragged
+                      return (
+                        <div
+                          key={i}
+                          draggable
+                          onDragStart={handleStakeDragStart}
+                          onDragEnd={handleStakeDragEnd}
+                          className="w-10 h-10 bg-amber-600 hover:bg-amber-500 rounded-lg flex items-center justify-center cursor-grab active:cursor-grabbing transition-colors border-2 border-amber-400"
+                          title="Drag to place stake"
+                        >
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+                            <path d="M12 2L12 14M12 14L8 10M12 14L16 10" />
+                            <path d="M5 22H19" />
+                            <path d="M12 14V22" />
+                          </svg>
+                        </div>
+                      );
+                    } else {
+                      // Used stake - grayed out, click to remove claim
+                      return (
+                        <div
+                          key={i}
+                          onClick={() => {
+                            if (claimedArea) {
+                              // Remove the claimed area and restore the stake
+                              setClaimedAreas(prev => prev.filter(a => a.id !== claimedArea.id));
+                              setStakesInventory(prev => prev + 1);
+                            }
+                          }}
+                          className="w-10 h-10 bg-slate-600 hover:bg-slate-500 rounded-lg flex items-center justify-center cursor-pointer transition-colors border-2 border-slate-500"
+                          title="Click to remove this claim"
+                        >
+                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
+                            <path d="M12 2L12 14M12 14L8 10M12 14L16 10" />
+                            <path d="M5 22H19" />
+                            <path d="M12 14V22" />
+                          </svg>
+                        </div>
+                      );
+                    }
+                  })}
                 </div>
                 <p className="text-slate-500 text-xs mt-2">
-                  Drag stakes to expand your claim
+                  Drag to place · Click gray to remove
                 </p>
               </div>
 
