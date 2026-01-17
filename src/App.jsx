@@ -110,8 +110,6 @@ export default function App() {
   const [groupRotationCenter, setGroupRotationCenter] = useState({ x: 0, y: 0 });
   const [originalGroupPositions, setOriginalGroupPositions] = useState([]);
 
-  // Grid mode state
-  const [gridEnabled, setGridEnabled] = useState(false);
 
   // =====================================================
   // KEYBOARD SHORTCUTS
@@ -398,38 +396,6 @@ export default function App() {
     x: (screenX - pan.x) / zoom,
     y: (screenY - pan.y) / zoom,
   }), [zoom, pan]);
-
-  // =====================================================
-  // GRID SNAP FUNCTIONS
-  // =====================================================
-  // Snap a single coordinate to grid cell center (so edges align with grid lines)
-  const snapToGrid = useCallback((value) => {
-    if (!gridEnabled) return value;
-    // Snap to cell center so shape edges align with grid lines
-    const halfCell = CELL_SIZE / 2;
-    return Math.round((value - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
-  }, [gridEnabled]);
-
-  // Snap vertices array to grid (snaps the centroid to cell center, then offsets all vertices)
-  const snapVerticesToGrid = useCallback((verts) => {
-    if (!gridEnabled || verts.length === 0) return verts;
-
-    // Calculate current centroid
-    const cx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
-    const cy = verts.reduce((s, v) => s + v.y, 0) / verts.length;
-
-    // Snap centroid to cell center (so edges align with grid lines)
-    const halfCell = CELL_SIZE / 2;
-    const snappedCx = Math.round((cx - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
-    const snappedCy = Math.round((cy - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
-
-    // Calculate offset
-    const dx = snappedCx - cx;
-    const dy = snappedCy - cy;
-
-    // Apply offset to all vertices
-    return verts.map(v => ({ x: v.x + dx, y: v.y + dy }));
-  }, [gridEnabled]);
 
   // =====================================================
   // FIEF AREA CALCULATIONS
@@ -1327,8 +1293,9 @@ export default function App() {
       const centroidDist = Math.hypot(newCx - existingCx, newCy - existingCy);
       if (centroidDist < SHAPE_SIZE * 0.5) {
         // Centroids are close - check if any vertices are nearly coincident
+        const existingBaseVerts = shape._verts || getVertices(shape);
         for (const nv of newVerts) {
-          for (const ev of (shape._verts || [])) {
+          for (const ev of existingBaseVerts) {
             if (Math.hypot(nv.x - ev.x, nv.y - ev.y) < EDGE_TOLERANCE * 2) {
               return true; // Vertices nearly coincident = overlapping shape
             }
@@ -1673,10 +1640,8 @@ export default function App() {
             } else {
               verts = calculateSnappedVertices(edge, middleClickAction, px, py);
             }
-            // Apply grid snap if enabled
-            const finalVerts = snapVerticesToGrid(verts);
-            if (!checkOverlap(finalVerts, middleClickAction)) {
-              setShapes(prev => [...prev, verticesToShape(finalVerts, middleClickAction, Date.now(), buildingType)]);
+            if (!checkOverlap(verts, middleClickAction)) {
+              setShapes(prev => [...prev, verticesToShape(verts, middleClickAction, Date.now(), buildingType)]);
             }
           }
         }
@@ -1692,7 +1657,7 @@ export default function App() {
       const groupShapes = getShapesByIds(draggedGroupIds);
 
       // Calculate transformed vertices for each shape in the group
-      let transformedShapes = groupShapes.map(shape => {
+      const transformedShapes = groupShapes.map(shape => {
         const verts = shape._verts || getVertices(shape);
         let newVerts;
 
@@ -1706,31 +1671,6 @@ export default function App() {
 
         return { ...shape, newVerts };
       });
-
-      // Apply grid snap to the entire group if grid is enabled
-      if (gridEnabled && transformedShapes.length > 0) {
-        // Use the first shape's centroid to determine snap offset
-        // This ensures all shapes maintain their relative grid alignment
-        const firstShape = transformedShapes[0];
-        const firstVerts = firstShape.newVerts;
-        const shapeCx = firstVerts.reduce((s, v) => s + v.x, 0) / firstVerts.length;
-        const shapeCy = firstVerts.reduce((s, v) => s + v.y, 0) / firstVerts.length;
-
-        // Snap first shape's centroid to cell center (so edges align with grid lines)
-        const halfCell = CELL_SIZE / 2;
-        const snappedCx = Math.round((shapeCx - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
-        const snappedCy = Math.round((shapeCy - halfCell) / CELL_SIZE) * CELL_SIZE + halfCell;
-
-        // Calculate additional offset needed
-        const snapDx = snappedCx - shapeCx;
-        const snapDy = snappedCy - shapeCy;
-
-        // Apply snap offset to all shapes in the group
-        transformedShapes = transformedShapes.map(shape => ({
-          ...shape,
-          newVerts: shape.newVerts.map(v => ({ x: v.x + snapDx, y: v.y + snapDy }))
-        }));
-      }
 
       // Check if new positions are valid (no overlap with non-group shapes)
       const hasOverlap = checkGroupOverlap(transformedShapes, draggedGroupIds);
@@ -1774,10 +1714,8 @@ export default function App() {
       const releasedButton = e.button === 0 ? 'left' : 'right';
       if (releasedButton === rotatingButton) {
         const rotatedVerts = rotateVertices(baseVertices, rotationAngle);
-        // Apply grid snap if enabled
-        const finalVerts = snapVerticesToGrid(rotatedVerts);
-        if (!checkOverlap(finalVerts, rotationShapeType)) {
-          setShapes(prev => [...prev, verticesToShape(finalVerts, rotationShapeType, Date.now(), buildingType)]);
+        if (!checkOverlap(rotatedVerts, rotationShapeType)) {
+          setShapes(prev => [...prev, verticesToShape(rotatedVerts, rotationShapeType, Date.now(), buildingType)]);
         }
       }
       setIsRotating(false);
@@ -1785,7 +1723,7 @@ export default function App() {
       setBaseVertices(null);
       setRotationAngle(0);
     }
-  }, [isRotating, rotatingButton, baseVertices, rotationAngle, rotationShapeType, rotateVertices, checkOverlap, verticesToShape, middleMouseStart, middleClickAction, screenToWorld, findShapeAtPoint, buildingType, isLocked, isDraggingGroup, isRotatingGroup, draggedGroupIds, dragOffset, groupRotationAngle, groupRotationCenter, getShapesByIds, getVertices, offsetVertices, rotateVertsAroundPoint, checkGroupOverlap, snapVerticesToGrid, gridEnabled, findClosestEdge, getFreeVertices, calculateSnappedVertices]);
+  }, [isRotating, rotatingButton, baseVertices, rotationAngle, rotationShapeType, rotateVertices, checkOverlap, verticesToShape, middleMouseStart, middleClickAction, screenToWorld, findShapeAtPoint, buildingType, isLocked, isDraggingGroup, isRotatingGroup, draggedGroupIds, dragOffset, groupRotationAngle, groupRotationCenter, getShapesByIds, getVertices, offsetVertices, rotateVertsAroundPoint, checkGroupOverlap, findClosestEdge, getFreeVertices, calculateSnappedVertices]);
 
   const handleClear = () => {
     setShapes([]);
@@ -2243,89 +2181,6 @@ export default function App() {
     return <g>{elements}</g>;
   };
 
-  // Render grid lines when grid mode is enabled
-  const renderGrid = () => {
-    if (!gridEnabled) return null;
-
-    const elements = [];
-    // Calculate visible area based on current pan and zoom
-    // We'll render a reasonable range around the viewport
-    const viewportWidth = 900;
-    const viewportHeight = 600;
-
-    // Convert viewport bounds to world coordinates
-    const worldMinX = -pan.x / zoom - viewportWidth;
-    const worldMaxX = (viewportWidth - pan.x) / zoom + viewportWidth;
-    const worldMinY = -pan.y / zoom - viewportHeight;
-    const worldMaxY = (viewportHeight - pan.y) / zoom + viewportHeight;
-
-    // Snap to grid boundaries
-    const startX = Math.floor(worldMinX / CELL_SIZE) * CELL_SIZE;
-    const endX = Math.ceil(worldMaxX / CELL_SIZE) * CELL_SIZE;
-    const startY = Math.floor(worldMinY / CELL_SIZE) * CELL_SIZE;
-    const endY = Math.ceil(worldMaxY / CELL_SIZE) * CELL_SIZE;
-
-    // Vertical lines
-    for (let x = startX; x <= endX; x += CELL_SIZE) {
-      elements.push(
-        <line
-          key={`grid-v-${x}`}
-          x1={x}
-          y1={startY}
-          x2={x}
-          y2={endY}
-          stroke="rgba(148, 163, 184, 0.2)"
-          strokeWidth={1 / zoom}
-        />
-      );
-    }
-
-    // Horizontal lines
-    for (let y = startY; y <= endY; y += CELL_SIZE) {
-      elements.push(
-        <line
-          key={`grid-h-${y}`}
-          x1={startX}
-          y1={y}
-          x2={endX}
-          y2={y}
-          stroke="rgba(148, 163, 184, 0.2)"
-          strokeWidth={1 / zoom}
-        />
-      );
-    }
-
-    // Origin marker (slightly brighter lines at 0,0)
-    if (startX <= 0 && endX >= 0) {
-      elements.push(
-        <line
-          key="grid-origin-v"
-          x1={0}
-          y1={startY}
-          x2={0}
-          y2={endY}
-          stroke="rgba(148, 163, 184, 0.4)"
-          strokeWidth={2 / zoom}
-        />
-      );
-    }
-    if (startY <= 0 && endY >= 0) {
-      elements.push(
-        <line
-          key="grid-origin-h"
-          x1={startX}
-          y1={0}
-          x2={endX}
-          y2={0}
-          stroke="rgba(148, 163, 184, 0.4)"
-          strokeWidth={2 / zoom}
-        />
-      );
-    }
-
-    return <g style={{ pointerEvents: 'none' }}>{elements}</g>;
-  };
-
   // Render drop zones for stakes (shown when dragging)
   const renderStakeDropZones = () => {
     if (!fiefMode || !draggingStake) return null;
@@ -2427,15 +2282,6 @@ export default function App() {
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
-        </button>
-
-        {/* Grid toggle button */}
-        <button
-          onClick={() => setGridEnabled(!gridEnabled)}
-          className={`${gridEnabled ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-slate-700 hover:bg-slate-600'} text-white w-8 h-8 rounded-lg text-sm transition-colors flex items-center justify-center`}
-          title={gridEnabled ? 'Disable grid snap' : 'Enable grid snap'}
-        >
-          <span className="font-bold text-base">#</span>
         </button>
 
         {/* Lock toggle button */}
@@ -2649,7 +2495,6 @@ export default function App() {
           <rect width="100%" height="100%" fill="url(#grid)" />
 
           <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-            {renderGrid()}
             {renderFiefAreas()}
             {renderStakeDropZones()}
             {renderShapes()}
@@ -2673,9 +2518,6 @@ export default function App() {
       {/* Instructions bar with Share/Discord on right */}
       <div className="w-full max-w-4xl flex items-center justify-between mt-3 bg-slate-800/50 px-4 py-2 rounded-lg">
         <div className="flex items-center gap-3">
-          {gridEnabled && (
-            <span className="text-cyan-400 font-medium text-sm">Grid Snap</span>
-          )}
           {isLocked ? (
             <p className="text-slate-400 text-sm">
               <span className="text-amber-400 font-medium">Lock Mode:</span>
