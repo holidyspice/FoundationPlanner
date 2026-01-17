@@ -24,7 +24,8 @@ function Foundation({ vertices, building = 'atreides', onClick }) {
   // Create shape from vertices
   const shape = useMemo(() => {
     const s = new THREE.Shape();
-    if (vertices.length > 0) {
+    // Only create shape if we have valid vertices
+    if (vertices && vertices.length >= 3) {
       s.moveTo(vertices[0].x, vertices[0].y);
       for (let i = 1; i < vertices.length; i++) {
         s.lineTo(vertices[i].x, vertices[i].y);
@@ -33,6 +34,11 @@ function Foundation({ vertices, building = 'atreides', onClick }) {
     }
     return s;
   }, [vertices]);
+
+  // Don't render if no valid vertices
+  if (!vertices || vertices.length < 3) {
+    return null;
+  }
 
   const extrudeSettings = {
     depth: FOUNDATION_HEIGHT,
@@ -169,10 +175,15 @@ export default function Viewer3D({ shapes, buildingType, onBack }) {
   const [currentFloor, setCurrentFloor] = useState(0);
   const [hoveredEdge, setHoveredEdge] = useState(null);
 
+  // Filter to only valid shapes (those with at least 3 vertices)
+  const validShapes = useMemo(() => {
+    return shapes.filter(shape => shape._verts && shape._verts.length >= 3);
+  }, [shapes]);
+
   // Extract edges from foundation shapes for wall placement
   const foundationEdges = useMemo(() => {
     const edges = [];
-    shapes.forEach((shape, shapeIndex) => {
+    validShapes.forEach((shape, shapeIndex) => {
       const verts = shape._verts || [];
       for (let i = 0; i < verts.length; i++) {
         const start = verts[i];
@@ -187,7 +198,7 @@ export default function Viewer3D({ shapes, buildingType, onBack }) {
       }
     });
     return edges;
-  }, [shapes]);
+  }, [validShapes]);
 
   // Handle edge click for wall placement
   const handleEdgeClick = useCallback((edge) => {
@@ -208,10 +219,10 @@ export default function Viewer3D({ shapes, buildingType, onBack }) {
 
   // Handle roof placement
   const handleAddRoof = useCallback(() => {
-    // For simplicity, add roofs based on all foundations
-    shapes.forEach((shape, index) => {
+    // For simplicity, add roofs based on all valid foundations
+    validShapes.forEach((shape, index) => {
       const verts = shape._verts || [];
-      if (verts.length > 0) {
+      if (verts.length >= 3) {
         setRoofs(prev => [...prev, {
           id: `roof-${Date.now()}-${index}`,
           vertices: verts,
@@ -220,7 +231,7 @@ export default function Viewer3D({ shapes, buildingType, onBack }) {
         }]);
       }
     });
-  }, [shapes, currentFloor]);
+  }, [validShapes, currentFloor]);
 
   // Calculate camera position based on scene bounds
   const cameraPosition = useMemo(() => {
@@ -263,6 +274,31 @@ export default function Viewer3D({ shapes, buildingType, onBack }) {
     });
 
     return [(minX + maxX) / 2, 0, (minY + maxY) / 2];
+  }, [shapes]);
+
+  // Calculate scene center for ground plane positioning
+  const sceneCenter = useMemo(() => {
+    if (shapes.length === 0) return { x: 0, z: 0, size: 500 };
+
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+
+    shapes.forEach(shape => {
+      const verts = shape._verts || [];
+      verts.forEach(v => {
+        minX = Math.min(minX, v.x);
+        maxX = Math.max(maxX, v.x);
+        minY = Math.min(minY, v.y);
+        maxY = Math.max(maxY, v.y);
+      });
+    });
+
+    const size = Math.max(maxX - minX, maxY - minY, 200) * 2;
+    return {
+      x: (minX + maxX) / 2,
+      z: (minY + maxY) / 2,
+      size: size
+    };
   }, [shapes]);
 
   return (
@@ -343,7 +379,7 @@ export default function Viewer3D({ shapes, buildingType, onBack }) {
         <div className="flex-1" />
 
         <div className="text-slate-400 text-sm">
-          {shapes.length} foundations | {walls.length} walls | {roofs.length} roofs
+          {validShapes.length} foundations | {walls.length} walls | {roofs.length} roofs
         </div>
       </div>
 
@@ -362,17 +398,20 @@ export default function Viewer3D({ shapes, buildingType, onBack }) {
             shadow-mapSize={[2048, 2048]}
           />
 
-          {/* Ground plane */}
-          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -1, 0]} receiveShadow>
-            <planeGeometry args={[2000, 2000]} />
+          {/* Ground plane - centered on shapes */}
+          <mesh rotation={[-Math.PI / 2, 0, 0]} position={[sceneCenter.x, -1, sceneCenter.z]} receiveShadow>
+            <planeGeometry args={[sceneCenter.size, sceneCenter.size]} />
             <meshStandardMaterial color="#1e293b" />
           </mesh>
 
-          {/* Grid helper */}
-          <gridHelper args={[2000, 40, '#334155', '#1e293b']} position={[0, 0, 0]} />
+          {/* Grid helper - centered on shapes */}
+          <gridHelper
+            args={[sceneCenter.size, Math.floor(sceneCenter.size / 50), '#334155', '#1e293b']}
+            position={[sceneCenter.x, 0.1, sceneCenter.z]}
+          />
 
           {/* Foundations */}
-          {shapes.map((shape, index) => (
+          {validShapes.map((shape, index) => (
             <Foundation
               key={shape.id || index}
               vertices={shape._verts || []}
