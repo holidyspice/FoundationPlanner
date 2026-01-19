@@ -870,8 +870,8 @@ export default function App() {
 
   // Check if an item overlaps with any existing placed items
   const doesItemOverlap = useCallback((x, y, itemDef, excludeItemId = null) => {
-    const newWidth = itemDef.width;
-    const newHeight = itemDef.height;
+    const newWidth = (itemDef.size?.width || 1) * ITEM_GRID_SIZE;
+    const newHeight = (itemDef.size?.height || 1) * ITEM_GRID_SIZE;
 
     for (const placed of placedItems) {
       // Skip the item we're moving (if any)
@@ -880,8 +880,8 @@ export default function App() {
       const placedDef = BASE_ITEMS[placed.itemType];
       if (!placedDef) continue;
 
-      const placedWidth = placedDef.width;
-      const placedHeight = placedDef.height;
+      const placedWidth = (placedDef.size?.width || 1) * ITEM_GRID_SIZE;
+      const placedHeight = (placedDef.size?.height || 1) * ITEM_GRID_SIZE;
 
       // Check for rectangle overlap
       const noOverlap =
