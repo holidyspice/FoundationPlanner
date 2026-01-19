@@ -3038,16 +3038,22 @@ export default function App() {
         {/* Toggle button */}
         <button
           onClick={() => setItemSidebarOpen(!itemSidebarOpen)}
-          className="w-full flex items-center justify-center mb-2 text-slate-400 hover:text-white"
+          className={`w-full flex flex-col items-center justify-center text-slate-400 hover:text-amber-400 transition-colors ${itemSidebarOpen ? 'mb-2' : 'mb-0'}`}
+          title={itemSidebarOpen ? 'Close item panel' : 'Open item panel - Place buildings and structures'}
         >
           {itemSidebarOpen ? (
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
             </svg>
           ) : (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-            </svg>
+            <>
+              <svg className="w-5 h-5 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+              <span className="text-xs font-medium" style={{ writingMode: 'vertical-rl', textOrientation: 'mixed' }}>
+                Items
+              </span>
+            </>
           )}
         </button>
 
