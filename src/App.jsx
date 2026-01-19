@@ -243,6 +243,7 @@ const ITEM_GRID_SIZE = 50; // Size of one item grid unit in pixels
 
 export default function App() {
   const [shapes, setShapes] = useState([]);
+  const [shapesHistory, setShapesHistory] = useState([]); // Undo history stack
   const [hoverInfo, setHoverInfo] = useState(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -332,7 +333,18 @@ export default function App() {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
       if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        setShapes(prev => prev.slice(0, -1));
+        // If we have history, restore from it; otherwise just remove last shape
+        setShapesHistory(prevHistory => {
+          if (prevHistory.length > 0) {
+            const lastState = prevHistory[prevHistory.length - 1];
+            setShapes(lastState);
+            return prevHistory.slice(0, -1);
+          } else {
+            // Fallback: just remove the last shape
+            setShapes(prev => prev.slice(0, -1));
+            return prevHistory;
+          }
+        });
       }
       // Delete selected item with Delete or Backspace
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedItemId !== null) {
@@ -2170,6 +2182,10 @@ export default function App() {
   }, [isRotating, rotatingButton, baseVertices, rotationAngle, rotationShapeType, rotateVertices, checkOverlap, verticesToShape, middleMouseStart, middleClickAction, screenToWorld, findShapeAtPoint, buildingType, isLocked, isDraggingGroup, isRotatingGroup, draggedGroupIds, dragOffset, groupRotationAngle, groupRotationCenter, getShapesByIds, getVertices, offsetVertices, rotateVertsAroundPoint, checkGroupOverlap, findClosestEdge, getFreeVertices, calculateSnappedVertices, gridEnabled, snapVerticesToGrid, snapGroupBoundingBoxToGrid, isDraggingPlacedItem]);
 
   const handleClear = () => {
+    // Save current state to history before clearing (if there are shapes to save)
+    if (shapes.length > 0) {
+      setShapesHistory(prev => [...prev.slice(-19), shapes]); // Keep last 20 states max
+    }
     setShapes([]);
     setHoverInfo(null);
     // Reset fief stakes
