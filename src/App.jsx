@@ -2248,9 +2248,13 @@ export default function App() {
     const rawX = (e.clientX - svgRect.left - pan.x) / zoom;
     const rawY = (e.clientY - svgRect.top - pan.y) / zoom;
 
-    // Snap to grid (use CELL_SIZE for fief grid snap)
-    const x = Math.round(rawX / CELL_SIZE) * CELL_SIZE;
-    const y = Math.round(rawY / CELL_SIZE) * CELL_SIZE;
+    // Get fief dimensions and calculate center offset
+    const fiefW = FIEF_DEFAULTS[draggingFief].width * CELL_SIZE;
+    const fiefH = FIEF_DEFAULTS[draggingFief].height * CELL_SIZE;
+
+    // Offset so drop point becomes center of fief, then snap to grid
+    const x = Math.round((rawX - fiefW / 2) / CELL_SIZE) * CELL_SIZE;
+    const y = Math.round((rawY - fiefH / 2) / CELL_SIZE) * CELL_SIZE;
 
     // Set the fief type and position
     setFiefType(draggingFief);
@@ -3305,18 +3309,18 @@ export default function App() {
             {/* Connector line pointing to item panel */}
             <svg
               className="absolute pointer-events-none"
-              style={{ top: '50%', left: '100%', width: '350px', height: '300px', marginLeft: '4px', marginTop: '-8px' }}
-              viewBox="0 0 350 300"
+              style={{ top: '50%', left: '100%', width: '150px', height: '70px', marginLeft: '4px', marginTop: '-8px' }}
+              viewBox="0 0 150 70"
               fill="none"
             >
               <path
-                d="M 0 8 L 320 8 Q 340 8 340 28 L 340 290"
+                d="M 0 8 L 120 8 Q 137 8 137 28 L 137 39"
                 stroke="rgb(245 158 11 / 0.4)"
                 strokeWidth="2"
                 strokeDasharray="6 4"
                 strokeLinecap="round"
               />
-              <circle cx="340" cy="290" r="4" fill="rgb(245 158 11 / 0.5)" />
+              <circle cx="137" cy="39" r="4" fill="rgb(245 158 11 / 0.5)" />
             </svg>
           </div>
         )}
@@ -3431,23 +3435,6 @@ export default function App() {
                 />
               </div>
 
-              <div className="flex flex-col gap-1">
-                <label className="text-slate-400 text-xs">Padding (+{fiefPadding.toFixed(1)}%)</label>
-                <input
-                  type="range"
-                  value={fiefPadding}
-                  onChange={(e) => setFiefPadding(parseFloat(e.target.value))}
-                  min="0"
-                  max="5"
-                  step="0.1"
-                  className="w-full accent-amber-500"
-                />
-                <div className="flex justify-between text-xs text-slate-500">
-                  <span>0%</span>
-                  <span>5%</span>
-                </div>
-              </div>
-
               {/* Stakes Section */}
               <div className="border-t border-slate-600 pt-2 mt-1">
                 <div className="text-slate-300 font-medium text-sm mb-2">Stakes ({stakesInventory}/{MAX_STAKES})</div>
@@ -3465,14 +3452,10 @@ export default function App() {
                           draggable
                           onDragStart={handleStakeDragStart}
                           onDragEnd={handleStakeDragEnd}
-                          className="w-10 h-10 bg-amber-600 hover:bg-amber-500 rounded-lg flex items-center justify-center cursor-grab active:cursor-grabbing transition-colors border-2 border-amber-400"
+                          className="w-10 h-10 rounded-lg flex items-center justify-center cursor-grab active:cursor-grabbing transition-all hover:scale-110"
                           title="Drag to place stake"
                         >
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
-                            <path d="M12 2L12 14M12 14L8 10M12 14L16 10" />
-                            <path d="M5 22H19" />
-                            <path d="M12 14V22" />
-                          </svg>
+                          <img src="/items/staking-unit.webp" alt="Stake" className="w-full h-full object-contain" />
                         </div>
                       );
                     } else {
@@ -3487,14 +3470,10 @@ export default function App() {
                               setStakesInventory(prev => prev + 1);
                             }
                           }}
-                          className="w-10 h-10 bg-slate-600 hover:bg-slate-500 rounded-lg flex items-center justify-center cursor-pointer transition-colors border-2 border-slate-500"
+                          className="w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer transition-all hover:scale-110 opacity-40 grayscale"
                           title="Click to remove this claim"
                         >
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2">
-                            <path d="M12 2L12 14M12 14L8 10M12 14L16 10" />
-                            <path d="M5 22H19" />
-                            <path d="M12 14V22" />
-                          </svg>
+                          <img src="/items/staking-unit.webp" alt="Used Stake" className="w-full h-full object-contain" />
                         </div>
                       );
                     }
