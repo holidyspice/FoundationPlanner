@@ -51,10 +51,195 @@ const CORNER_STEPS = 3; // Number of steps for Atreides stepped corners
 const DIAGONAL_FLAT_RATIO = 0.27; // Size of small flats on Choam Facility corners (27%)
 
 const FIEF_DEFAULTS = {
-  basic: { width: 5, height: 5 },
-  advanced: { width: 10, height: 10 },
+  standard: { width: 5.5, height: 5.5 },
+  advanced: { width: 10.5, height: 10.5 },
 };
 const MAX_STAKES = 5;
+
+// =====================================================
+// BASE MANAGEMENT ITEMS CATALOG
+// =====================================================
+const ITEM_CATEGORIES = {
+  generator: { label: 'Generators', color: '#eab308' },    // yellow - produces power
+  refiner: { label: 'Refiners', color: '#3b82f6' },        // blue - consumes power, produces water
+  fabricator: { label: 'Fabricators', color: '#a855f7' },  // purple - consumes power
+  storage: { label: 'Storage', color: '#06b6d4' },         // cyan - stores water
+};
+
+const BASE_ITEMS = {
+  'spice-generator': {
+    id: 'spice-generator',
+    name: 'Spice-Powered Generator',
+    category: 'generator',
+    icon: '/items/spice-generator.webp',
+    size: { width: 1, height: 1 },
+    stats: {
+      powerConsumption: 0,
+      powerGeneration: 1000,
+      waterPerMinute: 0,
+      waterStorage: 0,
+    },
+    materials: [
+      { name: 'Plastanium Ingot', amount: 430 },
+      { name: 'Silicone Block', amount: 180 },
+      { name: 'Spice Melange', amount: 270 },
+      { name: 'Complex Machinery', amount: 100 },
+      { name: 'Cobalt Paste', amount: 300 },
+      { name: 'Advanced Machinery', amount: 40 },
+    ],
+  },
+  'wind-turbine': {
+    id: 'wind-turbine',
+    name: 'Wind Turbine Directional',
+    category: 'generator',
+    icon: '/items/wind-turbine.webp',
+    size: { width: 1, height: 1 },
+    stats: {
+      powerConsumption: 0,
+      powerGeneration: 350,
+      waterPerMinute: 0,
+      waterStorage: 0,
+    },
+    materials: [
+      { name: 'Duraluminum Ingot', amount: 120 },
+      { name: 'Cobalt Paste', amount: 160 },
+      { name: 'Calibrated Servok', amount: 50 },
+      { name: 'Spice Melange', amount: 3 },
+    ],
+  },
+  'wind-turbine-omni': {
+    id: 'wind-turbine-omni',
+    name: 'Wind Turbine Omnidirectional',
+    category: 'generator',
+    icon: '/items/wind-turbine-omni.webp',
+    size: { width: 1, height: 1 },
+    stats: {
+      powerConsumption: 0,
+      powerGeneration: 150,
+      waterPerMinute: 0,
+      waterStorage: 0,
+    },
+    materials: [
+      { name: 'Steel Ingot', amount: 45 },
+      { name: 'Cobalt Paste', amount: 65 },
+      { name: 'Calibrated Servok', amount: 20 },
+    ],
+  },
+  'windtrap': {
+    id: 'windtrap',
+    name: 'Windtrap',
+    category: 'refiner',
+    icon: '/items/windtrap.webp',
+    size: { width: 1, height: 1 },
+    stats: {
+      powerConsumption: 75,
+      powerGeneration: 0,
+      waterPerMinute: 0.75,
+      waterStorage: 500,
+    },
+    materials: [
+      { name: 'Steel Ingot', amount: 90 },
+      { name: 'Silicone Block', amount: 30 },
+      { name: 'Calibrated Servok', amount: 2 },
+    ],
+  },
+  'large-windtrap': {
+    id: 'large-windtrap',
+    name: 'Large Windtrap',
+    category: 'refiner',
+    icon: '/items/large-windtrap.webp',
+    size: { width: 1, height: 1 },
+    stats: {
+      powerConsumption: 135,
+      powerGeneration: 0,
+      waterPerMinute: 1.75,
+      waterStorage: 500,
+    },
+    materials: [
+      { name: 'Duraluminum Ingot', amount: 240 },
+      { name: 'Silicone Block', amount: 250 },
+      { name: 'Calibrated Servok', amount: 70 },
+      { name: 'Spice Melange', amount: 5 },
+    ],
+  },
+  'deathstill': {
+    id: 'deathstill',
+    name: 'Fremen Deathstill',
+    category: 'fabricator',
+    icon: '/items/deathstill.webp',
+    size: { width: 1, height: 1 },
+    stats: {
+      powerConsumption: 200,
+      powerGeneration: 0,
+      waterPerMinute: 0,
+      waterStorage: 0,
+      totalYield: 25000,
+      processingTime: 60,
+    },
+    materials: [
+      { name: 'Steel Ingot', amount: 60 },
+      { name: 'Silicone Block', amount: 28 },
+      { name: 'Complex Machinery', amount: 32 },
+    ],
+  },
+  'deathstill-advanced': {
+    id: 'deathstill-advanced',
+    name: 'Advanced Fremen Deathstill',
+    category: 'fabricator',
+    icon: '/items/deathstill-advanced.webp',
+    size: { width: 1, height: 1 },
+    stats: {
+      powerConsumption: 350,
+      powerGeneration: 0,
+      waterPerMinute: 0,
+      waterStorage: 0,
+      totalYield: 45000,
+      processingTime: 50,
+    },
+    materials: [
+      { name: 'Duraluminum Ingot', amount: 240 },
+      { name: 'Silicone Block', amount: 170 },
+      { name: 'Complex Machinery', amount: 70 },
+    ],
+  },
+  'water-cistern-medium': {
+    id: 'water-cistern-medium',
+    name: 'Medium Water Cistern',
+    category: 'storage',
+    icon: '/items/water-cistern-medium.webp',
+    size: { width: 1, height: 1 },
+    stats: {
+      powerConsumption: 0,
+      powerGeneration: 0,
+      waterPerMinute: 0,
+      waterStorage: 25000,
+    },
+    materials: [
+      { name: 'Steel Ingot', amount: 60 },
+      { name: 'Silicone Block', amount: 30 },
+    ],
+  },
+  'water-cistern-large': {
+    id: 'water-cistern-large',
+    name: 'Large Water Cistern',
+    category: 'storage',
+    icon: '/items/water-cistern-large.webp',
+    size: { width: 1, height: 1 },
+    stats: {
+      powerConsumption: 0,
+      powerGeneration: 0,
+      waterPerMinute: 0,
+      waterStorage: 100000,
+    },
+    materials: [
+      { name: 'Duraluminum Ingot', amount: 150 },
+      { name: 'Silicone Block', amount: 160 },
+      { name: 'Industrial Pump', amount: 25 },
+    ],
+  },
+};
+
+const ITEM_GRID_SIZE = 50; // Size of one item grid unit in pixels
 
 export default function App() {
   const [shapes, setShapes] = useState([]);
@@ -78,9 +263,11 @@ export default function App() {
 
   // Fief mode state
   const [fiefMode, setFiefMode] = useState(false);
-  const [fiefType, setFiefType] = useState('basic'); // 'basic' or 'advanced'
-  const [fiefWidth, setFiefWidth] = useState(FIEF_DEFAULTS.basic.width);
-  const [fiefHeight, setFiefHeight] = useState(FIEF_DEFAULTS.basic.height);
+  const [fiefType, setFiefType] = useState('standard'); // 'standard' or 'advanced'
+  const [fiefWidth, setFiefWidth] = useState(FIEF_DEFAULTS.standard.width);
+  const [fiefHeight, setFiefHeight] = useState(FIEF_DEFAULTS.standard.height);
+  const [fiefPosition, setFiefPosition] = useState(null); // { x, y } world coordinates where fief is placed
+  const [draggingFief, setDraggingFief] = useState(null); // 'standard' or 'advanced' when dragging
   const [fiefPadding, setFiefPadding] = useState(0); // Padding percentage to EXPAND fief (0-5%)
 
   // Stakes state
@@ -90,6 +277,7 @@ export default function App() {
   const [draggingStake, setDraggingStake] = useState(null); // stake being dragged from inventory
   const [stakeDropZone, setStakeDropZone] = useState(null); // which zone is being hovered
   const [linkCopied, setLinkCopied] = useState(false); // feedback for copy link button
+  const [urlTooLong, setUrlTooLong] = useState(false); // warning when URL exceeds Discord limit
   const [middleMouseStart, setMiddleMouseStart] = useState(null); // track middle mouse for pan vs click detection
 
   // Discord webhook state
@@ -116,6 +304,26 @@ export default function App() {
   // Track if current placement is free (not edge-snapped)
   const [isFreePlacement, setIsFreePlacement] = useState(false);
 
+  // Base management state
+  const [placedItems, setPlacedItems] = useState([]); // { id, itemType, x, y }
+  const [itemSidebarOpen, setItemSidebarOpen] = useState(false);
+  const [draggingItem, setDraggingItem] = useState(null); // itemType being dragged from palette
+  const [dragItemPosition, setDragItemPosition] = useState({ x: 0, y: 0 }); // preview position
+
+  // Item Mode state - for selecting, moving, and deleting placed items
+  const [itemMode, setItemMode] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState(null);
+  const [isDraggingPlacedItem, setIsDraggingPlacedItem] = useState(false);
+  const [itemDragOffset, setItemDragOffset] = useState({ x: 0, y: 0 });
+
+  // Category expansion state for sidebar (collapsed by default)
+  const [expandedCategories, setExpandedCategories] = useState({
+    generator: false,
+    refiner: false,
+    fabricator: false,
+    storage: false,
+  });
+
   // =====================================================
   // KEYBOARD SHORTCUTS
   // =====================================================
@@ -126,10 +334,20 @@ export default function App() {
         e.preventDefault();
         setShapes(prev => prev.slice(0, -1));
       }
+      // Delete selected item with Delete or Backspace
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedItemId !== null) {
+        e.preventDefault();
+        setPlacedItems(prev => prev.filter(item => item.id !== selectedItemId));
+        setSelectedItemId(null);
+      }
+      // Escape to deselect item
+      if (e.key === 'Escape' && selectedItemId !== null) {
+        setSelectedItemId(null);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, []);
+  }, [selectedItemId]);
 
   // =====================================================
   // SHARE FUNCTIONALITY
@@ -242,7 +460,10 @@ export default function App() {
               setMiddleClickAction(actionFromCode[state.m] || 'delete');
             }
             if (state.fm !== undefined) setFiefMode(state.fm === 1);
-            if (state.ft !== undefined) setFiefType(state.ft === 1 || state.ft === 'a' ? 'advanced' : 'basic');
+            if (state.fx !== undefined && state.fy !== undefined) {
+              setFiefPosition({ x: state.fx, y: state.fy });
+            }
+            if (state.ft !== undefined) setFiefType(state.ft === 1 || state.ft === 'a' ? 'advanced' : 'standard');
             if (state.fw) setFiefWidth(state.fw);
             if (state.fh) setFiefHeight(state.fh);
             if (state.fp !== undefined) setFiefPadding(state.fp);
@@ -255,6 +476,17 @@ export default function App() {
                 parentId: isUltraCompactClaimed ? (a[1] === 0 ? 'main' : a[1]) : (a.p === 'm' ? 'main' : a.p),
               }));
               setClaimedAreas(expandedClaimed);
+            }
+
+            // Restore placed items from URL
+            if (state.pi && state.pi.length > 0) {
+              const expandedItems = state.pi.map((item, i) => ({
+                id: Date.now() + 2000 + i,
+                itemType: item[0],
+                x: item[1],
+                y: item[2],
+              }));
+              setPlacedItems(expandedItems);
             }
           } else if (state.s && state.s.length === 0) {
             // Empty design
@@ -273,6 +505,7 @@ export default function App() {
             if (state.fiefPadding !== undefined) setFiefPadding(state.fiefPadding);
             if (state.stakesInventory !== undefined) setStakesInventory(state.stakesInventory);
             if (state.claimedAreas) setClaimedAreas(state.claimedAreas);
+            if (state.placedItems) setPlacedItems(state.placedItems);
           }
 
           // Clear URL after loading
@@ -316,9 +549,11 @@ export default function App() {
     if (leftClickShape !== 'square') state.l = shapeToCode[leftClickShape];
     if (rightClickShape !== 'triangle') state.r = shapeToCode[rightClickShape];
     if (middleClickAction !== 'delete') state.m = shapeToCode[middleClickAction];
-    if (fiefMode) {
+    if (fiefMode && fiefPosition) {
       state.fm = 1;
-      if (fiefType !== 'basic') state.ft = 1;
+      state.fx = Math.round(fiefPosition.x);
+      state.fy = Math.round(fiefPosition.y);
+      if (fiefType !== 'standard') state.ft = 1;
       if (fiefWidth !== FIEF_DEFAULTS[fiefType].width) state.fw = fiefWidth;
       if (fiefHeight !== FIEF_DEFAULTS[fiefType].height) state.fh = fiefHeight;
       if (fiefPadding !== 0) state.fp = Math.round(fiefPadding * 10) / 10;
@@ -326,8 +561,17 @@ export default function App() {
       if (minClaimed.length > 0) state.ca = minClaimed;
     }
 
+    // Placed items: compact format [itemType, x, y]
+    if (placedItems.length > 0) {
+      state.pi = placedItems.map(item => [
+        item.itemType,
+        Math.round(item.x),
+        Math.round(item.y),
+      ]);
+    }
+
     return LZString.compressToEncodedURIComponent(JSON.stringify(state));
-  }, [shapes, buildingType, leftClickShape, rightClickShape, middleClickAction, fiefMode, fiefType, fiefWidth, fiefHeight, fiefPadding, stakesInventory, claimedAreas]);
+  }, [shapes, buildingType, leftClickShape, rightClickShape, middleClickAction, fiefMode, fiefPosition, fiefType, fiefWidth, fiefHeight, fiefPadding, stakesInventory, claimedAreas, placedItems]);
 
   // Generate and copy share link
   const handleCopyLink = useCallback(() => {
@@ -349,6 +593,12 @@ export default function App() {
     return `${window.location.origin}${window.location.pathname}?d=${compressed}`;
   }, [getCompressedState]);
 
+  // Check if URL exceeds Discord's 2048 character limit
+  useEffect(() => {
+    const url = generateShareUrl();
+    setUrlTooLong(url.length > 2048);
+  }, [generateShareUrl]);
+
   // Update fief dimensions when type changes
   useEffect(() => {
     setFiefWidth(FIEF_DEFAULTS[fiefType].width);
@@ -365,6 +615,23 @@ export default function App() {
       setStakeDropZone(null);
     }
   }, [fiefMode]);
+
+  // Sync Item Mode with sidebar open state
+  useEffect(() => {
+    setItemMode(itemSidebarOpen);
+    if (itemSidebarOpen) {
+      // Disable Lock Mode when entering Item Mode
+      setIsLocked(false);
+      setHoveredGroup([]);
+      setIsDraggingGroup(false);
+      setIsRotatingGroup(false);
+    }
+    // Clear item selection when closing sidebar
+    if (!itemSidebarOpen) {
+      setSelectedItemId(null);
+      setIsDraggingPlacedItem(false);
+    }
+  }, [itemSidebarOpen]);
 
   // Stake countdown timer
   useEffect(() => {
@@ -407,8 +674,9 @@ export default function App() {
   // =====================================================
   // Snap vertices to grid so shape edges align with grid lines
   // Grid lines are at 0, 50, 100, ... so centroid should be at 25, 75, 125, ... (cell centers)
-  const snapVerticesToGrid = useCallback((verts) => {
-    if (!gridEnabled || verts.length === 0) return verts;
+  // force=true bypasses the gridEnabled check (used for first shape placement)
+  const snapVerticesToGrid = useCallback((verts, force = false) => {
+    if ((!gridEnabled && !force) || verts.length === 0) return verts;
 
     // Calculate current centroid
     const cx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
@@ -461,18 +729,17 @@ export default function App() {
 
   // Calculate all buildable areas (main fief + claimed stakes)
   const getBuildableAreas = useCallback(() => {
-    if (!fiefMode) return [];
+    if (!fiefMode || !fiefPosition) return [];
 
     const areas = [];
     const fiefW = fiefWidth * CELL_SIZE;
     const fiefH = fiefHeight * CELL_SIZE;
 
-    // Main fief area - upper-left corner at origin (0, 0)
-    // Fief extends to the right and downward from origin
+    // Main fief area - positioned where user placed it
     const mainFief = {
       id: 'main',
-      x: 0,
-      y: 0,
+      x: fiefPosition.x,
+      y: fiefPosition.y,
       width: fiefW,
       height: fiefH,
     };
@@ -557,7 +824,7 @@ export default function App() {
     }
 
     return { areas, areaMap };
-  }, [fiefMode, fiefWidth, fiefHeight, claimedAreas, placedStakes]);
+  }, [fiefMode, fiefPosition, fiefWidth, fiefHeight, claimedAreas, placedStakes]);
 
   // Check if a point is inside any buildable area (with padding to EXPAND the area)
   const isPointInBuildableArea = useCallback((px, py) => {
@@ -585,6 +852,50 @@ export default function App() {
     if (!fiefMode) return true;
     return verts.every(v => isPointInBuildableArea(v.x, v.y));
   }, [fiefMode, isPointInBuildableArea]);
+
+  // Check if item position is within buildable area (for fief mode)
+  const isItemInBuildableArea = useCallback((x, y, itemDef) => {
+    if (!fiefMode) return true;
+    const itemWidth = (itemDef.size?.width || 1) * ITEM_GRID_SIZE;
+    const itemHeight = (itemDef.size?.height || 1) * ITEM_GRID_SIZE;
+    // Check all four corners of the item
+    const corners = [
+      { x, y },
+      { x: x + itemWidth, y },
+      { x, y: y + itemHeight },
+      { x: x + itemWidth, y: y + itemHeight },
+    ];
+    return corners.every(corner => isPointInBuildableArea(corner.x, corner.y));
+  }, [fiefMode, isPointInBuildableArea]);
+
+  // Check if an item overlaps with any existing placed items
+  const doesItemOverlap = useCallback((x, y, itemDef, excludeItemId = null) => {
+    const newWidth = itemDef.width;
+    const newHeight = itemDef.height;
+
+    for (const placed of placedItems) {
+      // Skip the item we're moving (if any)
+      if (excludeItemId && placed.id === excludeItemId) continue;
+
+      const placedDef = BASE_ITEMS[placed.itemType];
+      if (!placedDef) continue;
+
+      const placedWidth = placedDef.width;
+      const placedHeight = placedDef.height;
+
+      // Check for rectangle overlap
+      const noOverlap =
+        x + newWidth <= placed.x ||      // new item is to the left
+        x >= placed.x + placedWidth ||   // new item is to the right
+        y + newHeight <= placed.y ||     // new item is above
+        y >= placed.y + placedHeight;    // new item is below
+
+      if (!noOverlap) {
+        return true; // Items overlap
+      }
+    }
+    return false; // No overlap
+  }, [placedItems]);
 
   // Get available drop zones for stakes
   const getStakeDropZones = useCallback(() => {
@@ -978,7 +1289,9 @@ export default function App() {
 
       // Convert SVG to PNG using canvas
       const svgString = new XMLSerializer().serializeToString(exportSvg);
-      const svgBase64 = btoa(unescape(encodeURIComponent(svgString)));
+      // Properly encode UTF-8 to base64 (replaces deprecated unescape())
+      const svgBase64 = btoa(encodeURIComponent(svgString).replace(/%([0-9A-F]{2})/g,
+        (match, p1) => String.fromCharCode(parseInt(p1, 16))));
       const dataUrl = `data:image/svg+xml;base64,${svgBase64}`;
 
       // Create image and canvas
@@ -994,6 +1307,9 @@ export default function App() {
       canvas.width = 900;
       canvas.height = 600;
       const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('Failed to create canvas context');
+      }
       ctx.drawImage(img, 0, 0);
 
       // Get blob from canvas
@@ -1436,6 +1752,38 @@ export default function App() {
       return;
     }
 
+    // Item mode: handle dragging placed items
+    if (itemMode && isDraggingPlacedItem && selectedItemId !== null) {
+      const mouseX = (screenX - pan.x) / zoom;
+      const mouseY = (screenY - pan.y) / zoom;
+      const rawX = mouseX - itemDragOffset.x;
+      const rawY = mouseY - itemDragOffset.y;
+
+      // Snap to grid
+      const newX = Math.round(rawX / ITEM_GRID_SIZE) * ITEM_GRID_SIZE;
+      const newY = Math.round(rawY / ITEM_GRID_SIZE) * ITEM_GRID_SIZE;
+
+      // Check fief boundary if enabled
+      const item = placedItems.find(i => i.id === selectedItemId);
+      if (item) {
+        const itemDef = BASE_ITEMS[item.itemType];
+        if (fiefMode && itemDef && !isItemInBuildableArea(newX, newY, itemDef)) {
+          return; // Don't allow moving outside fief
+        }
+        // Check for overlap with other items (exclude the item being dragged)
+        if (itemDef && doesItemOverlap(newX, newY, itemDef, selectedItemId)) {
+          return; // Don't allow moving on top of another item
+        }
+      }
+
+      setPlacedItems(prev => prev.map(item =>
+        item.id === selectedItemId
+          ? { ...item, x: newX, y: newY }
+          : item
+      ));
+      return;
+    }
+
     const { x: px, y: py } = screenToWorld(screenX, screenY);
 
     // Lock mode handling
@@ -1476,17 +1824,24 @@ export default function App() {
       return;
     }
 
+    // Don't show shape hover preview in item mode
+    if (itemMode) {
+      setHoverInfo(null);
+      return;
+    }
+
     const { edge, distance } = findClosestEdge(px, py);
 
     let leftVerts, rightVerts;
 
     if (!edge || distance > SNAP_THRESHOLD) {
-      // Free placement - apply grid snap if enabled
+      // Free placement - apply grid snap if enabled (always snap first shape)
       leftVerts = getFreeVertices(px, py, leftClickShape);
       rightVerts = getFreeVertices(px, py, rightClickShape);
-      if (gridEnabled) {
-        leftVerts = snapVerticesToGrid(leftVerts);
-        rightVerts = snapVerticesToGrid(rightVerts);
+      const isFirstShape = shapes.length === 0;
+      if (gridEnabled || isFirstShape) {
+        leftVerts = snapVerticesToGrid(leftVerts, isFirstShape);
+        rightVerts = snapVerticesToGrid(rightVerts, isFirstShape);
       }
       setHoverInfo({ freePlace: true, x: px, y: py, leftVerts, rightVerts });
     } else {
@@ -1495,7 +1850,7 @@ export default function App() {
       rightVerts = calculateSnappedVertices(edge, rightClickShape, px, py);
       setHoverInfo({ freePlace: false, edge, leftVerts, rightVerts });
     }
-  }, [findClosestEdge, calculateSnappedVertices, screenToWorld, isPanning, panStart, isRotating, baseVertices, rotationStartX, leftClickShape, rightClickShape, getFreeVertices, isLocked, isDraggingGroup, isRotatingGroup, dragStart, findShapeAtPoint, findConnectedGroup, gridEnabled, snapVerticesToGrid]);
+  }, [findClosestEdge, calculateSnappedVertices, screenToWorld, isPanning, panStart, isRotating, baseVertices, rotationStartX, leftClickShape, rightClickShape, getFreeVertices, isLocked, isDraggingGroup, isRotatingGroup, dragStart, findShapeAtPoint, findConnectedGroup, gridEnabled, snapVerticesToGrid, itemMode, isDraggingPlacedItem, selectedItemId, pan, zoom, itemDragOffset, placedItems, fiefMode, isItemInBuildableArea, doesItemOverlap, shapes]);
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();
@@ -1589,8 +1944,8 @@ export default function App() {
       }
     }
 
-    // Handle left or right click (NOT in lock mode)
-    if (!isLocked && (e.button === 0 || e.button === 2)) {
+    // Handle left or right click (NOT in lock mode or item mode)
+    if (!isLocked && !itemMode && (e.button === 0 || e.button === 2)) {
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
       const screenX = e.clientX - rect.left;
@@ -1612,9 +1967,10 @@ export default function App() {
       const isFree = !edge || distance > SNAP_THRESHOLD;
       if (isFree) {
         verts = getFreeVertices(px, py, shapeType);
-        // Apply grid snap for free placements
-        if (gridEnabled) {
-          verts = snapVerticesToGrid(verts);
+        // Apply grid snap for free placements (always snap first shape)
+        const isFirstShape = shapes.length === 0;
+        if (gridEnabled || isFirstShape) {
+          verts = snapVerticesToGrid(verts, isFirstShape);
         }
       } else {
         // Edge snap takes priority
@@ -1629,7 +1985,7 @@ export default function App() {
       setRotationShapeType(shapeType);
       setIsFreePlacement(isFree);
     }
-  }, [pan, isRotating, rotatingButton, screenToWorld, findClosestEdge, calculateSnappedVertices, leftClickShape, rightClickShape, getFreeVertices, findShapeAtPoint, isLocked, findConnectedGroup, getShapesByIds, getGroupCentroid, gridEnabled, snapVerticesToGrid]);
+  }, [pan, isRotating, rotatingButton, screenToWorld, findClosestEdge, calculateSnappedVertices, leftClickShape, rightClickShape, getFreeVertices, findShapeAtPoint, isLocked, itemMode, findConnectedGroup, getShapesByIds, getGroupCentroid, gridEnabled, snapVerticesToGrid, shapes]);
 
   // Check if transformed group shapes overlap with any shapes outside the group
   const checkGroupOverlap = useCallback((transformedShapes, groupIds) => {
@@ -1688,8 +2044,8 @@ export default function App() {
     // Handle middle mouse button release
     if (e.button === 1) {
       setIsPanning(false);
-      // If minimal movement, perform middle click action - NOT in lock mode
-      if (!isLocked && middleMouseStart) {
+      // If minimal movement, perform middle click action - NOT in lock mode or item mode
+      if (!isLocked && !itemMode && middleMouseStart) {
         const rect = e.currentTarget.getBoundingClientRect();
         const endX = e.clientX - rect.left;
         const endY = e.clientY - rect.top;
@@ -1706,10 +2062,11 @@ export default function App() {
             const { edge, distance } = findClosestEdge(px, py);
             let verts;
             if (!edge || distance > SNAP_THRESHOLD) {
-              // Free placement - apply grid snap if enabled
+              // Free placement - apply grid snap if enabled (always snap first shape)
               verts = getFreeVertices(px, py, middleClickAction);
-              if (gridEnabled) {
-                verts = snapVerticesToGrid(verts);
+              const isFirstShape = shapes.length === 0;
+              if (gridEnabled || isFirstShape) {
+                verts = snapVerticesToGrid(verts, isFirstShape);
               }
             } else {
               // Edge snap takes priority
@@ -1726,6 +2083,12 @@ export default function App() {
     }
 
     setIsPanning(false);
+
+    // End item mode dragging
+    if (isDraggingPlacedItem) {
+      setIsDraggingPlacedItem(false);
+      return;
+    }
 
     // Handle lock mode group operations
     if (isLocked && (isDraggingGroup || isRotatingGroup) && draggedGroupIds.length > 0) {
@@ -1804,7 +2167,7 @@ export default function App() {
       setRotationAngle(0);
       setIsFreePlacement(false);
     }
-  }, [isRotating, rotatingButton, baseVertices, rotationAngle, rotationShapeType, rotateVertices, checkOverlap, verticesToShape, middleMouseStart, middleClickAction, screenToWorld, findShapeAtPoint, buildingType, isLocked, isDraggingGroup, isRotatingGroup, draggedGroupIds, dragOffset, groupRotationAngle, groupRotationCenter, getShapesByIds, getVertices, offsetVertices, rotateVertsAroundPoint, checkGroupOverlap, findClosestEdge, getFreeVertices, calculateSnappedVertices, gridEnabled, snapVerticesToGrid, snapGroupBoundingBoxToGrid]);
+  }, [isRotating, rotatingButton, baseVertices, rotationAngle, rotationShapeType, rotateVertices, checkOverlap, verticesToShape, middleMouseStart, middleClickAction, screenToWorld, findShapeAtPoint, buildingType, isLocked, isDraggingGroup, isRotatingGroup, draggedGroupIds, dragOffset, groupRotationAngle, groupRotationCenter, getShapesByIds, getVertices, offsetVertices, rotateVertsAroundPoint, checkGroupOverlap, findClosestEdge, getFreeVertices, calculateSnappedVertices, gridEnabled, snapVerticesToGrid, snapGroupBoundingBoxToGrid, isDraggingPlacedItem]);
 
   const handleClear = () => {
     setShapes([]);
@@ -1813,6 +2176,9 @@ export default function App() {
     setStakesInventory(MAX_STAKES);
     setPlacedStakes([]);
     setClaimedAreas([]);
+    // Reset placed items
+    setPlacedItems([]);
+    setSelectedItemId(null);
   };
   const handleResetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
 
@@ -1861,6 +2227,56 @@ export default function App() {
   const handleCancelStake = useCallback((stakeId) => {
     setPlacedStakes(prev => prev.filter(s => s.id !== stakeId));
     setStakesInventory(prev => prev + 1);
+  }, []);
+
+  // =====================================================
+  // FIEF DRAG HANDLERS
+  // =====================================================
+  const handleFiefDragStart = useCallback((e, fiefTypeValue) => {
+    e.dataTransfer.setData('text/plain', `fief:${fiefTypeValue}`);
+    setDraggingFief(fiefTypeValue);
+  }, []);
+
+  const handleFiefDragEnd = useCallback(() => {
+    setDraggingFief(null);
+  }, []);
+
+  const handleFiefDrop = useCallback((e) => {
+    if (!draggingFief) return;
+
+    const svgRect = e.currentTarget.getBoundingClientRect();
+    const rawX = (e.clientX - svgRect.left - pan.x) / zoom;
+    const rawY = (e.clientY - svgRect.top - pan.y) / zoom;
+
+    // Snap to grid (use CELL_SIZE for fief grid snap)
+    const x = Math.round(rawX / CELL_SIZE) * CELL_SIZE;
+    const y = Math.round(rawY / CELL_SIZE) * CELL_SIZE;
+
+    // Set the fief type and position
+    setFiefType(draggingFief);
+    setFiefWidth(FIEF_DEFAULTS[draggingFief].width);
+    setFiefHeight(FIEF_DEFAULTS[draggingFief].height);
+    setFiefPosition({ x, y });
+    setFiefMode(true);
+
+    // Reset stakes when placing a new fief
+    setStakesInventory(MAX_STAKES);
+    setClaimedAreas([]);
+    setPlacedStakes([]);
+
+    setDraggingFief(null);
+  }, [draggingFief, pan, zoom]);
+
+  const handleClearFief = useCallback(() => {
+    setFiefMode(false);
+    setFiefPosition(null);
+    setFiefType('standard');
+    setFiefWidth(FIEF_DEFAULTS.standard.width);
+    setFiefHeight(FIEF_DEFAULTS.standard.height);
+    setFiefPadding(0);
+    setStakesInventory(MAX_STAKES);
+    setClaimedAreas([]);
+    setPlacedStakes([]);
   }, []);
 
   // =====================================================
@@ -2039,6 +2455,9 @@ export default function App() {
   };
 
   const renderHoverPreview = () => {
+    // Don't show shape preview in item mode
+    if (itemMode) return null;
+
     const cornerStyle = BUILDING_TYPES[buildingType]?.cornerStyle || 'round';
 
     // Show group drag/rotate preview in lock mode
@@ -2393,6 +2812,374 @@ export default function App() {
   const plastoneCost = materialCosts.plastone || 0;
   const graniteCost = materialCosts.granite || 0;
 
+  // Calculate resource totals from placed items
+  const resourceTotals = useMemo(() => {
+    return placedItems.reduce((totals, placedItem) => {
+      const itemDef = BASE_ITEMS[placedItem.itemType];
+      if (!itemDef) return totals;
+
+      totals.powerGenerated += itemDef.stats.powerGeneration || 0;
+      totals.powerConsumed += itemDef.stats.powerConsumption || 0;
+      totals.waterPerMinute += itemDef.stats.waterPerMinute || 0;
+      totals.waterStorage += itemDef.stats.waterStorage || 0;
+      return totals;
+    }, {
+      powerGenerated: 0,
+      powerConsumed: 0,
+      waterPerMinute: 0,
+      waterStorage: 0,
+    });
+  }, [placedItems]);
+
+  // Calculate material totals from placed items
+  const materialTotals = useMemo(() => {
+    const totals = {};
+    placedItems.forEach(placedItem => {
+      const itemDef = BASE_ITEMS[placedItem.itemType];
+      if (!itemDef || !itemDef.materials) return;
+
+      itemDef.materials.forEach(mat => {
+        totals[mat.name] = (totals[mat.name] || 0) + mat.amount;
+      });
+    });
+    // Sort by amount descending
+    return Object.entries(totals).sort((a, b) => b[1] - a[1]);
+  }, [placedItems]);
+
+  const netPower = resourceTotals.powerGenerated - resourceTotals.powerConsumed;
+  const waterPerHour = resourceTotals.waterPerMinute * 60;
+
+  // Handle item drag start from palette
+  const handleItemDragStart = useCallback((itemType, e) => {
+    setDraggingItem(itemType);
+    setDragItemPosition({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  // Handle item drag over canvas
+  const handleItemDragOver = useCallback((e) => {
+    if (!draggingItem) return;
+    setDragItemPosition({ x: e.clientX, y: e.clientY });
+  }, [draggingItem]);
+
+  // Handle item drop on canvas
+  const handleItemDrop = useCallback((e) => {
+    if (!draggingItem) return;
+
+    const svgRect = e.currentTarget.getBoundingClientRect();
+    const rawX = (e.clientX - svgRect.left - pan.x) / zoom;
+    const rawY = (e.clientY - svgRect.top - pan.y) / zoom;
+
+    // Snap to grid
+    const x = Math.round(rawX / ITEM_GRID_SIZE) * ITEM_GRID_SIZE;
+    const y = Math.round(rawY / ITEM_GRID_SIZE) * ITEM_GRID_SIZE;
+
+    const itemDef = BASE_ITEMS[draggingItem];
+    if (!itemDef) return;
+
+    // Check fief boundary
+    if (fiefMode && !isItemInBuildableArea(x, y, itemDef)) {
+      setDraggingItem(null);
+      return;
+    }
+
+    // Check for overlap with existing items
+    if (doesItemOverlap(x, y, itemDef)) {
+      setDraggingItem(null);
+      return;
+    }
+
+    const newItem = {
+      id: Date.now(),
+      itemType: draggingItem,
+      x,
+      y,
+    };
+
+    setPlacedItems(prev => [...prev, newItem]);
+    setDraggingItem(null);
+  }, [draggingItem, pan, zoom, fiefMode, isItemInBuildableArea, doesItemOverlap]);
+
+  // Handle item deletion
+  const handleItemDelete = useCallback((itemId) => {
+    setPlacedItems(prev => prev.filter(item => item.id !== itemId));
+    if (selectedItemId === itemId) {
+      setSelectedItemId(null);
+    }
+  }, [selectedItemId]);
+
+  // Handle placed item mouse down (for selection and dragging in item mode)
+  const handlePlacedItemMouseDown = useCallback((e, item) => {
+    if (!itemMode) return;
+    e.stopPropagation();
+
+    // Select the item
+    setSelectedItemId(item.id);
+
+    // Start dragging
+    const svgRect = e.currentTarget.closest('svg').getBoundingClientRect();
+    const mouseX = (e.clientX - svgRect.left - pan.x) / zoom;
+    const mouseY = (e.clientY - svgRect.top - pan.y) / zoom;
+
+    setItemDragOffset({
+      x: mouseX - item.x,
+      y: mouseY - item.y,
+    });
+    setIsDraggingPlacedItem(true);
+  }, [itemMode, pan, zoom]);
+
+  // Handle placed item mouse move (for dragging)
+  const handlePlacedItemMouseMove = useCallback((e) => {
+    if (!isDraggingPlacedItem || selectedItemId === null) return;
+
+    const svgRect = e.currentTarget.getBoundingClientRect();
+    const mouseX = (e.clientX - svgRect.left - pan.x) / zoom;
+    const mouseY = (e.clientY - svgRect.top - pan.y) / zoom;
+
+    const newX = mouseX - itemDragOffset.x;
+    const newY = mouseY - itemDragOffset.y;
+
+    // Check fief boundary if enabled
+    const item = placedItems.find(i => i.id === selectedItemId);
+    if (item) {
+      const itemDef = BASE_ITEMS[item.itemType];
+      if (fiefMode && itemDef && !isItemInBuildableArea(newX, newY, itemDef)) {
+        return; // Don't allow moving outside fief
+      }
+      // Check for overlap with other items (exclude the item being dragged)
+      if (itemDef && doesItemOverlap(newX, newY, itemDef, selectedItemId)) {
+        return; // Don't allow moving on top of another item
+      }
+    }
+
+    setPlacedItems(prev => prev.map(item =>
+      item.id === selectedItemId
+        ? { ...item, x: newX, y: newY }
+        : item
+    ));
+  }, [isDraggingPlacedItem, selectedItemId, pan, zoom, itemDragOffset, placedItems, fiefMode, isItemInBuildableArea, doesItemOverlap]);
+
+  // Handle placed item mouse up (end dragging)
+  const handlePlacedItemMouseUp = useCallback(() => {
+    setIsDraggingPlacedItem(false);
+  }, []);
+
+  // Render placed items on canvas
+  const renderPlacedItems = () => {
+    return placedItems.map(item => {
+      const itemDef = BASE_ITEMS[item.itemType];
+      if (!itemDef) return null;
+
+      const width = (itemDef.size?.width || 1) * ITEM_GRID_SIZE;
+      const height = (itemDef.size?.height || 1) * ITEM_GRID_SIZE;
+      const isSelected = selectedItemId === item.id;
+
+      return (
+        <g key={item.id} transform={`translate(${item.x}, ${item.y})`}>
+          {/* Selection highlight */}
+          {isSelected && (
+            <rect
+              x={-4}
+              y={-4}
+              width={width + 8}
+              height={height + 8}
+              fill="none"
+              stroke="#fbbf24"
+              strokeWidth={3}
+              strokeDasharray="6,3"
+              pointerEvents="none"
+            />
+          )}
+          <image
+            href={itemDef.icon}
+            width={width}
+            height={height}
+            style={{ cursor: itemMode ? (isDraggingPlacedItem ? 'grabbing' : 'grab') : 'pointer' }}
+            onMouseDown={(e) => handlePlacedItemMouseDown(e, item)}
+            onClick={(e) => {
+              e.stopPropagation();
+              if (itemMode) {
+                // In item mode, click to select
+                setSelectedItemId(item.id);
+              } else if (e.button === 0 && leftClickShape === 'delete') {
+                handleItemDelete(item.id);
+              }
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (itemMode) {
+                // In item mode, right-click to delete
+                handleItemDelete(item.id);
+              } else if (rightClickShape === 'delete') {
+                handleItemDelete(item.id);
+              }
+            }}
+          />
+          {/* Border based on category color */}
+          <rect
+            x={0}
+            y={0}
+            width={width}
+            height={height}
+            fill="none"
+            stroke={isSelected ? '#fbbf24' : (ITEM_CATEGORIES[itemDef.category]?.color || '#888')}
+            strokeWidth={isSelected ? 3 : 2}
+            pointerEvents="none"
+          />
+        </g>
+      );
+    });
+  };
+
+  // Render item sidebar
+  const renderItemSidebar = () => {
+    return (
+      <div className={`bg-slate-800 rounded-xl border-2 border-slate-700 transition-all duration-300 ${itemSidebarOpen ? 'w-56 p-4' : 'w-10 p-2'}`}>
+        {/* Toggle button */}
+        <button
+          onClick={() => setItemSidebarOpen(!itemSidebarOpen)}
+          className="w-full flex items-center justify-center mb-2 text-slate-400 hover:text-white"
+        >
+          {itemSidebarOpen ? (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            </svg>
+          )}
+        </button>
+
+        {itemSidebarOpen && (
+          <>
+            <div className="text-slate-300 font-medium text-sm mb-3">Base Items</div>
+
+            {/* Item palette by category */}
+            <div className="mb-4 max-h-64 overflow-y-auto custom-scrollbar">
+              {Object.entries(ITEM_CATEGORIES).map(([categoryKey, category]) => {
+                const categoryItems = Object.values(BASE_ITEMS).filter(item => item.category === categoryKey);
+                if (categoryItems.length === 0) return null;
+
+                const isExpanded = expandedCategories[categoryKey];
+
+                return (
+                  <div key={categoryKey} className="mb-2">
+                    {/* Category header */}
+                    <button
+                      onClick={() => setExpandedCategories(prev => ({
+                        ...prev,
+                        [categoryKey]: !prev[categoryKey]
+                      }))}
+                      className="w-full flex items-center justify-between px-2 py-1 rounded hover:bg-slate-700 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-3 h-3 rounded-sm"
+                          style={{ backgroundColor: category.color }}
+                        />
+                        <span className="text-xs font-medium text-slate-300">{category.label}</span>
+                        <span className="text-xs text-slate-500">({categoryItems.length})</span>
+                      </div>
+                      <svg
+                        className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {/* Category items */}
+                    {isExpanded && (
+                      <div className="grid grid-cols-2 gap-1 mt-1 pl-2">
+                        {categoryItems.map(item => (
+                          <div
+                            key={item.id}
+                            draggable
+                            onDragStart={(e) => handleItemDragStart(item.id, e)}
+                            className="bg-slate-700 rounded-lg p-1.5 cursor-grab active:cursor-grabbing hover:bg-slate-600 transition-colors"
+                            title={item.name}
+                          >
+                            <img
+                              src={item.icon}
+                              alt={item.name}
+                              className="w-full aspect-square object-contain rounded"
+                              draggable={false}
+                            />
+                            <div className="text-xs text-slate-300 text-center mt-1 truncate">{item.name}</div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Resource totals */}
+            <div className="border-t border-slate-600 pt-3">
+              <div className="text-slate-300 font-medium text-sm mb-2">Resources</div>
+
+              {/* Power */}
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-yellow-400">⚡ Power</span>
+                <span className={netPower < 0 ? 'text-red-400 font-bold' : 'text-green-400'}>
+                  {netPower >= 0 ? '+' : ''}{netPower}
+                </span>
+              </div>
+              <div className="text-xs text-slate-500 mb-2 pl-4">
+                +{resourceTotals.powerGenerated} / -{resourceTotals.powerConsumed}
+              </div>
+
+              {/* Power warning */}
+              {netPower < 0 && (
+                <div className="bg-red-900/50 border border-red-500 rounded px-2 py-1 mb-2">
+                  <span className="text-red-400 text-xs">⚠ Insufficient power!</span>
+                </div>
+              )}
+
+              {/* Water production */}
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-blue-400">💧 Water/hr</span>
+                <span className="text-blue-300">{waterPerHour.toFixed(1)} L</span>
+              </div>
+
+              {/* Water storage */}
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-cyan-400">🪣 Storage</span>
+                <span className="text-cyan-300">{resourceTotals.waterStorage} L</span>
+              </div>
+            </div>
+
+            {/* Item count */}
+            <div className="border-t border-slate-600 pt-3 mt-3">
+              <div className="text-xs text-slate-500">
+                Items placed: {placedItems.length}
+              </div>
+            </div>
+
+            {/* Material totals */}
+            {materialTotals.length > 0 && (
+              <div className="border-t border-slate-600 pt-3 mt-3">
+                <div className="text-slate-300 font-medium text-sm mb-2">Total Materials</div>
+                <div className="max-h-40 overflow-y-auto custom-scrollbar">
+                  {materialTotals.map(([name, amount]) => (
+                    <div key={name} className="flex items-center justify-between text-xs mb-1">
+                      <span className="text-slate-400 truncate mr-2">{name}</span>
+                      <span className="text-amber-300 font-medium">{amount.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-950 p-4 flex flex-col items-center">
       <div className="mb-4 text-center">
@@ -2404,38 +3191,42 @@ export default function App() {
 
       {/* Controls row: mouse assignments, clear, reset view, zoom */}
       <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
-        <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-2">
-          <label className="text-blue-400 text-sm font-medium">Left:</label>
-          <select value={leftClickShape} onChange={(e) => setLeftClickShape(e.target.value)}
-            className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-blue-500">
-            <option value="square">Square</option>
-            <option value="triangle">Triangle</option>
-            <option value="corner">Corner</option>
-            <option value="delete">Delete</option>
-          </select>
-        </div>
+        {!itemMode && (
+          <>
+            <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-2">
+              <label className="text-blue-400 text-sm font-medium">Left:</label>
+              <select value={leftClickShape} onChange={(e) => setLeftClickShape(e.target.value)}
+                className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-blue-500">
+                <option value="square">Square</option>
+                <option value="triangle">Triangle</option>
+                <option value="corner">Corner</option>
+                <option value="delete">Delete</option>
+              </select>
+            </div>
 
-        <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-2">
-          <label className="text-orange-400 text-sm font-medium">Right:</label>
-          <select value={rightClickShape} onChange={(e) => setRightClickShape(e.target.value)}
-            className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-orange-500">
-            <option value="square">Square</option>
-            <option value="triangle">Triangle</option>
-            <option value="corner">Corner</option>
-            <option value="delete">Delete</option>
-          </select>
-        </div>
+            <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-2">
+              <label className="text-orange-400 text-sm font-medium">Right:</label>
+              <select value={rightClickShape} onChange={(e) => setRightClickShape(e.target.value)}
+                className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-orange-500">
+                <option value="square">Square</option>
+                <option value="triangle">Triangle</option>
+                <option value="corner">Corner</option>
+                <option value="delete">Delete</option>
+              </select>
+            </div>
 
-        <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-2">
-          <label className="text-purple-400 text-sm font-medium">Middle:</label>
-          <select value={middleClickAction} onChange={(e) => setMiddleClickAction(e.target.value)}
-            className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-purple-500">
-            <option value="square">Square</option>
-            <option value="triangle">Triangle</option>
-            <option value="corner">Corner</option>
-            <option value="delete">Delete</option>
-          </select>
-        </div>
+            <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-2">
+              <label className="text-purple-400 text-sm font-medium">Middle:</label>
+              <select value={middleClickAction} onChange={(e) => setMiddleClickAction(e.target.value)}
+                className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-purple-500">
+                <option value="square">Square</option>
+                <option value="triangle">Triangle</option>
+                <option value="corner">Corner</option>
+                <option value="delete">Delete</option>
+              </select>
+            </div>
+          </>
+        )}
 
         {/* Clear button */}
         <button onClick={handleClear} disabled={shapes.length === 0}
@@ -2459,10 +3250,15 @@ export default function App() {
         {/* Lock toggle button */}
         <button
           onClick={() => {
-            setIsLocked(!isLocked);
+            const newLocked = !isLocked;
+            setIsLocked(newLocked);
             setHoveredGroup([]);
             setIsDraggingGroup(false);
             setIsRotatingGroup(false);
+            // Close item sidebar when enabling Lock Mode (mutually exclusive)
+            if (newLocked) {
+              setItemSidebarOpen(false);
+            }
           }}
           className={`${isLocked ? 'bg-amber-600 hover:bg-amber-500' : 'bg-slate-700 hover:bg-slate-600'} text-white w-8 h-8 rounded-lg text-sm transition-colors flex items-center justify-center`}
           title={isLocked ? 'Unlock to edit shapes' : 'Lock to move groups'}
@@ -2507,34 +3303,72 @@ export default function App() {
             </select>
           </div>
 
-          <div className="text-slate-300 font-medium text-sm border-t border-slate-600 pt-3">Fief Mode</div>
+          <div className="text-slate-300 font-medium text-sm border-t border-slate-600 pt-3">Fief</div>
 
-          {/* Fief Toggle */}
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={fiefMode}
-              onChange={(e) => setFiefMode(e.target.checked)}
-              className="w-4 h-4 accent-amber-500"
-            />
-            <span className={`text-sm ${fiefMode ? 'text-amber-400' : 'text-slate-400'}`}>
-              {fiefMode ? 'Enabled' : 'Disabled'}
-            </span>
-          </label>
+          {/* Draggable Fief Images */}
+          <div className="flex gap-2">
+            <div className="flex flex-col items-center gap-1">
+              <div
+                draggable
+                onDragStart={(e) => handleFiefDragStart(e, 'standard')}
+                onDragEnd={handleFiefDragEnd}
+                className={`w-16 h-16 rounded-lg cursor-grab active:cursor-grabbing transition-all overflow-hidden border-2 ${
+                  fiefMode && fiefType === 'standard'
+                    ? 'border-amber-400 ring-2 ring-amber-400/50'
+                    : 'border-slate-600 hover:border-slate-500'
+                }`}
+                title="Drag to place Standard Fief"
+              >
+                <img
+                  src="/items/fief-standard.webp"
+                  alt="Standard Fief"
+                  className="w-full h-full object-cover"
+                  draggable={false}
+                />
+              </div>
+              <span className="text-xs text-slate-400">Standard</span>
+            </div>
+            <div className="flex flex-col items-center gap-1">
+              <div
+                draggable
+                onDragStart={(e) => handleFiefDragStart(e, 'advanced')}
+                onDragEnd={handleFiefDragEnd}
+                className={`w-16 h-16 rounded-lg cursor-grab active:cursor-grabbing transition-all overflow-hidden border-2 ${
+                  fiefMode && fiefType === 'advanced'
+                    ? 'border-amber-400 ring-2 ring-amber-400/50'
+                    : 'border-slate-600 hover:border-slate-500'
+                }`}
+                title="Drag to place Advanced Fief"
+              >
+                <img
+                  src="/items/fief-advanced.webp"
+                  alt="Advanced Fief"
+                  className="w-full h-full object-cover"
+                  draggable={false}
+                />
+              </div>
+              <span className="text-xs text-slate-400">Advanced</span>
+            </div>
+          </div>
+          <p className="text-slate-500 text-xs">Drag onto canvas to place</p>
 
-          {/* Fief Type Selector - shown when fief mode enabled */}
-          {fiefMode && (
+          {/* Fief Settings - shown when fief is placed */}
+          {fiefMode && fiefPosition && (
             <>
-              <div className="flex flex-col gap-1">
-                <label className="text-slate-400 text-xs">Fief Type</label>
-                <select
-                  value={fiefType}
-                  onChange={(e) => setFiefType(e.target.value)}
-                  className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-amber-500"
-                >
-                  <option value="basic">Basic</option>
-                  <option value="advanced">Advanced</option>
-                </select>
+              {/* Clear Fief Button */}
+              <button
+                onClick={handleClearFief}
+                className="w-full bg-red-600/80 hover:bg-red-500 text-white text-sm py-1.5 rounded-lg transition-colors flex items-center justify-center gap-2"
+                title="Remove fief"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Clear Fief
+              </button>
+
+              <div className="text-slate-300 text-xs font-medium">
+                {fiefType === 'standard' ? 'Standard' : 'Advanced'} Fief ({fiefWidth} x {fiefHeight})
               </div>
 
               {/* Size Adjusters */}
@@ -2543,9 +3377,10 @@ export default function App() {
                 <input
                   type="number"
                   value={fiefWidth}
-                  onChange={(e) => setFiefWidth(Math.max(1, parseInt(e.target.value) || 1))}
-                  min="1"
+                  onChange={(e) => setFiefWidth(Math.max(0.5, parseFloat(e.target.value) || 0.5))}
+                  min="0.5"
                   max="20"
+                  step="0.5"
                   className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-amber-500 w-full"
                 />
               </div>
@@ -2555,9 +3390,10 @@ export default function App() {
                 <input
                   type="number"
                   value={fiefHeight}
-                  onChange={(e) => setFiefHeight(Math.max(1, parseInt(e.target.value) || 1))}
-                  min="1"
+                  onChange={(e) => setFiefHeight(Math.max(0.5, parseFloat(e.target.value) || 0.5))}
+                  min="0.5"
                   max="20"
+                  step="0.5"
                   className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-amber-500 w-full"
                 />
               </div>
@@ -2656,6 +3492,8 @@ export default function App() {
           onMouseUp={handleMouseUp}
           onMouseLeave={() => { setHoverInfo(null); setIsPanning(false); setIsRotating(false); setBaseVertices(null); setRotationAngle(0); }}
           onWheel={handleWheel}
+          onDragOver={(e) => { e.preventDefault(); handleItemDragOver(e); }}
+          onDrop={(e) => { handleItemDrop(e); handleFiefDrop(e); }}
           className={isPanning ? "cursor-grabbing" : "cursor-crosshair"}
         >
           <defs>
@@ -2671,6 +3509,7 @@ export default function App() {
             {renderFiefAreas()}
             {renderStakeDropZones()}
             {renderShapes()}
+            {renderPlacedItems()}
             {renderHoverPreview()}
 
             {shapes.length === 0 && !fiefMode && (
@@ -2686,6 +3525,9 @@ export default function App() {
           </g>
         </svg>
         </div>
+
+        {/* Right Sidebar - Items & Resources */}
+        {renderItemSidebar()}
       </div>
 
       {/* Instructions bar with Share/Discord on right */}
@@ -2694,7 +3536,15 @@ export default function App() {
           {gridEnabled && (
             <span className="text-cyan-400 font-medium text-sm">Grid Snap</span>
           )}
-          {isLocked ? (
+          {itemMode ? (
+            <p className="text-slate-400 text-sm">
+              <span className="text-blue-400 font-medium">Item Mode:</span>
+              <span className="text-slate-400 ml-2">Click</span> Select ·
+              <span className="text-slate-400 ml-2">Drag</span> Move ·
+              <span className="text-slate-400 ml-2">Right-click/Del</span> Delete ·
+              <span className="text-slate-400 ml-2">Esc</span> Deselect
+            </p>
+          ) : isLocked ? (
             <p className="text-slate-400 text-sm">
               <span className="text-amber-400 font-medium">Lock Mode:</span>
               <span className="text-slate-400 ml-2">Drag</span> Move Group ·
@@ -2730,6 +3580,11 @@ export default function App() {
               </>
             )}
           </button>
+          {urlTooLong && (
+            <span className="text-orange-400 text-xs" title="Design is too large for Discord embeds. Link will still work in browsers.">
+              URL exceeds Discord limit
+            </span>
+          )}
           <button onClick={() => setShowWebhookField(!showWebhookField)}
             className={`${showWebhookField ? 'bg-indigo-600' : 'bg-slate-700 hover:bg-slate-600'} text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1`}>
             <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
