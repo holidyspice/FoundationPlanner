@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import LZString from 'lz-string';
 
 // =====================================================
@@ -26,24 +26,28 @@ const COLOR_SCHEMES = {
     square:   { fill: '#22c55e', stroke: '#4ade80' },  // green-500/400
     triangle: { fill: '#16a34a', stroke: '#22c55e' },  // green-600/500
     corner:   { fill: '#15803d', stroke: '#16a34a' },  // green-700/600
+    stair:    { fill: '#166534', stroke: '#22c55e' },  // green-800/500
   },
   harkonnen: {
     // Red palette
     square:   { fill: '#ef4444', stroke: '#f87171' },  // red-500/400
     triangle: { fill: '#dc2626', stroke: '#ef4444' },  // red-600/500
     corner:   { fill: '#b91c1c', stroke: '#dc2626' },  // red-700/600
+    stair:    { fill: '#991b1b', stroke: '#ef4444' },  // red-800/500
   },
   choamShelter: {
     // Beige/tan palette
     square:   { fill: '#d4a574', stroke: '#e4c9a8' },  // warm beige
     triangle: { fill: '#c4956a', stroke: '#d4a574' },  // medium beige
     corner:   { fill: '#b08560', stroke: '#c4956a' },  // darker beige
+    stair:    { fill: '#9a7556', stroke: '#d4a574' },  // darker beige
   },
   choamFacility: {
     // Gray palette
     square:   { fill: '#6b7280', stroke: '#9ca3af' },  // gray-500/400
     triangle: { fill: '#4b5563', stroke: '#6b7280' },  // gray-600/500
     corner:   { fill: '#374151', stroke: '#4b5563' },  // gray-700/600
+    stair:    { fill: '#1f2937', stroke: '#6b7280' },  // gray-800/500
   },
 };
 
@@ -51,8 +55,8 @@ const CORNER_STEPS = 3; // Number of steps for Atreides stepped corners
 const DIAGONAL_FLAT_RATIO = 0.27; // Size of small flats on Choam Facility corners (27%)
 
 const FIEF_DEFAULTS = {
-  standard: { width: 5.5, height: 5.5 },
-  advanced: { width: 10.5, height: 10.5 },
+  standard: { width: 5.5, height: 5.5, power: 15 },
+  advanced: { width: 10.5, height: 10.5, power: 15 },
 };
 const MAX_STAKES = 5;
 
@@ -62,7 +66,8 @@ const MAX_STAKES = 5;
 const ITEM_CATEGORIES = {
   generator: { label: 'Generators', color: '#eab308' },    // yellow - produces power
   refiner: { label: 'Refiners', color: '#3b82f6' },        // blue - consumes power, produces water
-  fabricator: { label: 'Fabricators', color: '#a855f7' },  // purple - consumes power
+  utilities: { label: 'Utilities', color: '#a855f7' },     // purple - windtraps, deathstills
+  fabricator: { label: 'Fabricators', color: '#10b981' },  // green - consumes power
   storage: { label: 'Storage', color: '#06b6d4' },         // cyan - stores water
 };
 
@@ -125,16 +130,32 @@ const BASE_ITEMS = {
       { name: 'Calibrated Servok', amount: 20 },
     ],
   },
+  'fuel-powered-generator': {
+    id: 'fuel-powered-generator',
+    name: 'Fuel-Powered Generator',
+    category: 'generator',
+    icon: '/items/fuel-powered-generator.webp',
+    size: { width: 1, height: 1 },
+    stats: {
+      powerConsumption: 0,
+      powerGeneration: 75,
+      waterPerMinute: 0,
+      waterStorage: 0,
+    },
+    materials: [
+      { name: 'Salvaged Metal', amount: 45 },
+    ],
+  },
   'windtrap': {
     id: 'windtrap',
     name: 'Windtrap',
-    category: 'refiner',
+    category: 'utilities',
     icon: '/items/windtrap.webp',
     size: { width: 1, height: 1 },
     stats: {
       powerConsumption: 75,
       powerGeneration: 0,
-      waterPerMinute: 0.75,
+      waterPerMinute: 45,
       waterStorage: 500,
     },
     materials: [
@@ -146,13 +167,13 @@ const BASE_ITEMS = {
   'large-windtrap': {
     id: 'large-windtrap',
     name: 'Large Windtrap',
-    category: 'refiner',
+    category: 'utilities',
     icon: '/items/large-windtrap.webp',
     size: { width: 1, height: 1 },
     stats: {
       powerConsumption: 135,
       powerGeneration: 0,
-      waterPerMinute: 1.75,
+      waterPerMinute: 105,
       waterStorage: 500,
     },
     materials: [
@@ -165,13 +186,13 @@ const BASE_ITEMS = {
   'deathstill': {
     id: 'deathstill',
     name: 'Fremen Deathstill',
-    category: 'fabricator',
+    category: 'utilities',
     icon: '/items/deathstill.webp',
     size: { width: 1, height: 1 },
     stats: {
       powerConsumption: 200,
       powerGeneration: 0,
-      waterPerMinute: 0,
+      waterPerMinute: 416.67,
       waterStorage: 0,
       totalYield: 25000,
       processingTime: 60,
@@ -185,13 +206,13 @@ const BASE_ITEMS = {
   'deathstill-advanced': {
     id: 'deathstill-advanced',
     name: 'Advanced Fremen Deathstill',
-    category: 'fabricator',
+    category: 'utilities',
     icon: '/items/deathstill-advanced.webp',
     size: { width: 1, height: 1 },
     stats: {
       powerConsumption: 350,
       powerGeneration: 0,
-      waterPerMinute: 0,
+      waterPerMinute: 900,
       waterStorage: 0,
       totalYield: 45000,
       processingTime: 50,
@@ -237,12 +258,141 @@ const BASE_ITEMS = {
       { name: 'Industrial Pump', amount: 25 },
     ],
   },
+  'large-spice-refinery': {
+    id: 'large-spice-refinery',
+    name: 'Large Spice Refinery',
+    category: 'refiner',
+    icon: '/items/large-spice-refinery.webp',
+    size: { width: 1, height: 1 },
+    stats: {
+      powerConsumption: 500,
+      powerGeneration: 0,
+      waterPerMinute: 0,
+      waterStorage: 0,
+    },
+    materials: [
+      { name: 'Plastanium Ingot', amount: 950 },
+      { name: 'Silicone Block', amount: 1080 },
+      { name: 'Complex Machinery', amount: 350 },
+      { name: 'Spice Melange', amount: 1000 },
+      { name: 'Cobalt Paste', amount: 1110 },
+      { name: 'Advanced Machinery', amount: 55 },
+    ],
+  },
+  'large-ore-refinery': {
+    id: 'large-ore-refinery',
+    name: 'Large Ore Refinery',
+    category: 'refiner',
+    icon: '/items/large-ore-refinery.webp',
+    size: { width: 1, height: 1 },
+    stats: {
+      powerConsumption: 350,
+      powerGeneration: 0,
+      waterPerMinute: 0,
+      waterStorage: 0,
+    },
+    materials: [
+      { name: 'Plastanium Ingot', amount: 380 },
+      { name: 'Silicone Block', amount: 540 },
+      { name: 'Spice Melange', amount: 400 },
+      { name: 'Complex Machinery', amount: 200 },
+      { name: 'Cobalt Paste', amount: 745 },
+      { name: 'Advanced Machinery', amount: 40 },
+    ],
+  },
+  'medium-spice-refinery': {
+    id: 'medium-spice-refinery',
+    name: 'Medium Spice Refinery',
+    category: 'refiner',
+    icon: '/items/medium-spice-refinery.webp',
+    size: { width: 1, height: 1 },
+    stats: {
+      powerConsumption: 350,
+      powerGeneration: 0,
+      waterPerMinute: 0,
+      waterStorage: 0,
+    },
+    materials: [
+      { name: 'Plastanium Ingot', amount: 285 },
+      { name: 'Silicone Block', amount: 225 },
+      { name: 'Spice Melange', amount: 135 },
+      { name: 'Complex Machinery', amount: 100 },
+      { name: 'Cobalt Paste', amount: 190 },
+    ],
+  },
+  'medium-ore-refinery': {
+    id: 'medium-ore-refinery',
+    name: 'Medium Ore Refinery',
+    category: 'refiner',
+    icon: '/items/medium-ore-refinery.webp',
+    size: { width: 1, height: 1 },
+    stats: {
+      powerConsumption: 45,
+      powerGeneration: 0,
+      waterPerMinute: 0,
+      waterStorage: 0,
+    },
+    materials: [
+      { name: 'Steel Ingot', amount: 125 },
+      { name: 'Cobalt Paste', amount: 60 },
+      { name: 'Complex Machinery', amount: 50 },
+    ],
+  },
+  'medium-chemical-refinery': {
+    id: 'medium-chemical-refinery',
+    name: 'Medium Chemical Refinery',
+    category: 'refiner',
+    icon: '/items/medium-chemical-refinery.webp',
+    size: { width: 1, height: 1 },
+    stats: {
+      powerConsumption: 350,
+      powerGeneration: 0,
+      waterPerMinute: 0,
+      waterStorage: 0,
+    },
+    materials: [
+      { name: 'Duraluminum Ingot', amount: 150 },
+      { name: 'Silicone Block', amount: 90 },
+      { name: 'Complex Machinery', amount: 50 },
+      { name: 'Spice Melange', amount: 35 },
+    ],
+  },
 };
 
 const ITEM_GRID_SIZE = 50; // Size of one item grid unit in pixels
 
 export default function App() {
-  const [shapes, setShapes] = useState([]);
+  // Floor system state
+  const [currentFloor, setCurrentFloor] = useState(0);
+  const [allFloorShapes, setAllFloorShapes] = useState({ 0: [] });
+  const [allFloorItems, setAllFloorItems] = useState({ 0: [] });
+  const [showSilhouette, setShowSilhouette] = useState(true);
+
+  // Derived values for current floor
+  const shapes = allFloorShapes[currentFloor] || [];
+  const placedItems = allFloorItems[currentFloor] || [];
+
+  // Floor below for silhouette
+  const floorBelowShapes = currentFloor > 0 ? (allFloorShapes[currentFloor - 1] || []) : [];
+  const floorBelowItems = currentFloor > 0 ? (allFloorItems[currentFloor - 1] || []) : [];
+
+  // Wrapper setters that update the correct floor
+  const setShapes = useCallback((updater) => {
+    setAllFloorShapes(prev => {
+      const currentShapes = prev[currentFloor] || [];
+      const newShapes = typeof updater === 'function' ? updater(currentShapes) : updater;
+      return { ...prev, [currentFloor]: newShapes };
+    });
+  }, [currentFloor]);
+
+  const setPlacedItems = useCallback((updater) => {
+    setAllFloorItems(prev => {
+      const currentItems = prev[currentFloor] || [];
+      const newItems = typeof updater === 'function' ? updater(currentItems) : updater;
+      return { ...prev, [currentFloor]: newItems };
+    });
+  }, [currentFloor]);
+
   const [shapesHistory, setShapesHistory] = useState([]); // Undo history stack
   const [hoverInfo, setHoverInfo] = useState(null);
   const [zoom, setZoom] = useState(1);
@@ -250,9 +400,9 @@ export default function App() {
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [buildingType, setBuildingType] = useState('atreides');
-  const [leftClickShape, setLeftClickShape] = useState('square'); // 'square', 'triangle', 'corner', 'delete'
-  const [rightClickShape, setRightClickShape] = useState('triangle'); // 'square', 'triangle', 'corner', 'delete'
-  const [middleClickAction, setMiddleClickAction] = useState('delete'); // 'square', 'triangle', 'corner', 'delete'
+  const [leftClickShape, setLeftClickShape] = useState('square'); // 'square', 'triangle', 'corner', 'stair', 'delete'
+  const [rightClickShape, setRightClickShape] = useState('triangle'); // 'square', 'triangle', 'corner', 'stair', 'delete'
+  const [middleClickAction, setMiddleClickAction] = useState('delete'); // 'square', 'triangle', 'corner', 'stair', 'delete'
 
   // Rotation mode state
   const [isRotating, setIsRotating] = useState(false);
@@ -298,6 +448,8 @@ export default function App() {
   const [groupRotationAngle, setGroupRotationAngle] = useState(0);
   const [groupRotationCenter, setGroupRotationCenter] = useState({ x: 0, y: 0 });
   const [originalGroupPositions, setOriginalGroupPositions] = useState([]);
+  const [clipboard, setClipboard] = useState(null); // Copied shapes for paste
+  const mousePositionRef = useRef({ x: 0, y: 0 }); // Track mouse position for paste
 
   // Grid mode state
   const [gridEnabled, setGridEnabled] = useState(false);
@@ -305,8 +457,7 @@ export default function App() {
   // Track if current placement is free (not edge-snapped)
   const [isFreePlacement, setIsFreePlacement] = useState(false);
 
-  // Base management state
-  const [placedItems, setPlacedItems] = useState([]); // { id, itemType, x, y }
+  // Base management state (placedItems is derived from allFloorItems above)
   const [itemSidebarOpen, setItemSidebarOpen] = useState(false);
   const [draggingItem, setDraggingItem] = useState(null); // itemType being dragged from palette
   const [dragItemPosition, setDragItemPosition] = useState({ x: 0, y: 0 }); // preview position
@@ -321,9 +472,28 @@ export default function App() {
   const [expandedCategories, setExpandedCategories] = useState({
     generator: false,
     refiner: false,
+    utilities: false,
     fabricator: false,
     storage: false,
   });
+
+  // Toast notification system
+  const [toasts, setToasts] = useState([]);
+  const showToast = useCallback((message, type = 'info', duration = 3000) => {
+    const id = Date.now();
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, duration);
+  }, []);
+
+  // Help modal state
+  const [showHelpModal, setShowHelpModal] = useState(false);
+
+  // Auto-save and restore state
+  const [showRestorePrompt, setShowRestorePrompt] = useState(false);
+  const [savedStateAvailable, setSavedStateAvailable] = useState(false);
+  const [skipNextSave, setSkipNextSave] = useState(false);
 
   // =====================================================
   // KEYBOARD SHORTCUTS
@@ -331,35 +501,302 @@ export default function App() {
   useEffect(() => {
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+
+      // Ctrl+Z - Undo
       if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        // If we have history, restore from it; otherwise just remove last shape
+        // If we have history, restore from it; otherwise just remove last shape from current floor
         setShapesHistory(prevHistory => {
           if (prevHistory.length > 0) {
             const lastState = prevHistory[prevHistory.length - 1];
-            setShapes(lastState);
+            // Check if it's the new format (object with shapes and items) or old format (array)
+            if (lastState && lastState.shapes && lastState.items) {
+              setAllFloorShapes(lastState.shapes);
+              setAllFloorItems(lastState.items);
+            } else if (Array.isArray(lastState)) {
+              // Old format - just shapes array for floor 0
+              setAllFloorShapes({ 0: lastState });
+            }
             return prevHistory.slice(0, -1);
           } else {
-            // Fallback: just remove the last shape
-            setShapes(prev => prev.slice(0, -1));
+            // Fallback: just remove the last shape from current floor
+            setAllFloorShapes(prev => ({
+              ...prev,
+              [currentFloor]: (prev[currentFloor] || []).slice(0, -1)
+            }));
             return prevHistory;
           }
         });
       }
+
+      // Ctrl+C - Copy group (Lock mode only)
+      if ((e.key === 'c' || e.key === 'C') && (e.ctrlKey || e.metaKey) && isLocked) {
+        e.preventDefault();
+        // Find shape at current mouse position
+        const mousePos = mousePositionRef.current;
+        const shapeAtMouse = shapes.find(shape => {
+          const verts = shape._verts || [];
+          if (verts.length < 3) return false;
+          // Point-in-polygon test
+          let inside = false;
+          for (let i = 0, j = verts.length - 1; i < verts.length; j = i++) {
+            const xi = verts[i].x, yi = verts[i].y;
+            const xj = verts[j].x, yj = verts[j].y;
+            if (((yi > mousePos.y) !== (yj > mousePos.y)) &&
+                (mousePos.x < (xj - xi) * (mousePos.y - yi) / (yj - yi) + xi)) {
+              inside = !inside;
+            }
+          }
+          return inside;
+        });
+
+        if (shapeAtMouse) {
+          // Find connected group
+          const group = new Set([shapeAtMouse.id]);
+          const queue = [shapeAtMouse];
+          while (queue.length > 0) {
+            const current = queue.shift();
+            for (const other of shapes) {
+              if (group.has(other.id)) continue;
+              // Check if shapes share an edge
+              const verts1 = current._verts || [];
+              const verts2 = other._verts || [];
+              const tolerance = EDGE_TOLERANCE * 2;
+              let sharesEdge = false;
+              for (let i = 0; i < verts1.length && !sharesEdge; i++) {
+                const a1 = verts1[i];
+                const a2 = verts1[(i + 1) % verts1.length];
+                for (let j = 0; j < verts2.length && !sharesEdge; j++) {
+                  const b1 = verts2[j];
+                  const b2 = verts2[(j + 1) % verts2.length];
+                  const a1MatchesB1 = Math.hypot(a1.x - b1.x, a1.y - b1.y) < tolerance;
+                  const a1MatchesB2 = Math.hypot(a1.x - b2.x, a1.y - b2.y) < tolerance;
+                  const a2MatchesB1 = Math.hypot(a2.x - b1.x, a2.y - b1.y) < tolerance;
+                  const a2MatchesB2 = Math.hypot(a2.x - b2.x, a2.y - b2.y) < tolerance;
+                  if ((a1MatchesB1 && a2MatchesB2) || (a1MatchesB2 && a2MatchesB1)) {
+                    sharesEdge = true;
+                  }
+                }
+              }
+              if (sharesEdge) {
+                group.add(other.id);
+                queue.push(other);
+              }
+            }
+          }
+
+          // Get group shapes and calculate centroid
+          const groupShapes = shapes.filter(s => group.has(s.id));
+          let totalX = 0, totalY = 0, totalVerts = 0;
+          for (const shape of groupShapes) {
+            const verts = shape._verts || [];
+            for (const v of verts) {
+              totalX += v.x;
+              totalY += v.y;
+              totalVerts++;
+            }
+          }
+          const centroidX = totalX / totalVerts;
+          const centroidY = totalY / totalVerts;
+
+          // Store shapes with vertices relative to centroid
+          const clipboardData = groupShapes.map(shape => ({
+            type: shape.type,
+            building: shape.building,
+            rotation: shape.rotation,
+            _verts: (shape._verts || []).map(v => ({
+              x: v.x - centroidX,
+              y: v.y - centroidY
+            }))
+          }));
+          setClipboard(clipboardData);
+        }
+      }
+
+      // Ctrl+V - Paste group (Lock mode only)
+      if ((e.key === 'v' || e.key === 'V') && (e.ctrlKey || e.metaKey) && isLocked && clipboard) {
+        e.preventDefault();
+        const mousePos = mousePositionRef.current;
+        const baseId = Date.now();
+
+        // Create new shapes at mouse position
+        const newShapes = clipboard.map((shape, i) => ({
+          id: baseId + i,
+          type: shape.type,
+          building: shape.building,
+          rotation: shape.rotation,
+          x: mousePos.x,
+          y: mousePos.y,
+          _verts: shape._verts.map(v => ({
+            x: v.x + mousePos.x,
+            y: v.y + mousePos.y
+          }))
+        }));
+
+        setShapes(prev => [...prev, ...newShapes]);
+      }
+
       // Delete selected item with Delete or Backspace
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedItemId !== null) {
         e.preventDefault();
         setPlacedItems(prev => prev.filter(item => item.id !== selectedItemId));
         setSelectedItemId(null);
       }
-      // Escape to deselect item
-      if (e.key === 'Escape' && selectedItemId !== null) {
-        setSelectedItemId(null);
+
+      // ? or H to open help modal
+      if ((e.key === '?' || e.key === 'h' || e.key === 'H') && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        setShowHelpModal(prev => !prev);
+      }
+
+      // Escape to close modals or deselect
+      if (e.key === 'Escape') {
+        if (showHelpModal) {
+          setShowHelpModal(false);
+        } else if (selectedItemId !== null) {
+          setSelectedItemId(null);
+        }
+      }
+
+      // G to toggle grid
+      if ((e.key === 'g' || e.key === 'G') && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        setGridEnabled(prev => !prev);
+      }
+
+      // L to toggle lock mode
+      if ((e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey) {
+        e.preventDefault();
+        setIsLocked(prev => {
+          if (!prev) setItemSidebarOpen(false);
+          return !prev;
+        });
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedItemId]);
+  }, [selectedItemId, currentFloor, isLocked, shapes, clipboard, setShapes, showHelpModal]);
+
+  // =====================================================
+  // AUTO-SAVE & RESTORE
+  // =====================================================
+  const STORAGE_KEY = 'dune-base-planner-autosave';
+
+  // Save current state to localStorage
+  const saveToLocalStorage = useCallback(() => {
+    if (skipNextSave) {
+      setSkipNextSave(false);
+      return;
+    }
+    const state = {
+      allFloorShapes,
+      allFloorItems,
+      currentFloor,
+      buildingType,
+      fiefMode,
+      fiefType,
+      fiefWidth,
+      fiefHeight,
+      fiefPosition,
+      claimedAreas,
+      stakesInventory,
+      leftClickShape,
+      rightClickShape,
+      middleClickAction,
+      gridEnabled,
+      timestamp: Date.now(),
+    };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    } catch (e) {
+      console.warn('Failed to save to localStorage:', e);
+    }
+  }, [allFloorShapes, allFloorItems, currentFloor, buildingType, fiefMode, fiefType, fiefWidth, fiefHeight, fiefPosition, claimedAreas, stakesInventory, leftClickShape, rightClickShape, middleClickAction, gridEnabled, skipNextSave]);
+
+  // Auto-save every 30 seconds when there are shapes
+  useEffect(() => {
+    const hasContent = Object.values(allFloorShapes).some(s => s.length > 0) ||
+                       Object.values(allFloorItems).some(i => i.length > 0);
+    if (!hasContent) return;
+
+    const interval = setInterval(() => {
+      saveToLocalStorage();
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [saveToLocalStorage, allFloorShapes, allFloorItems]);
+
+  // Also save on significant changes (debounced)
+  useEffect(() => {
+    const hasContent = Object.values(allFloorShapes).some(s => s.length > 0) ||
+                       Object.values(allFloorItems).some(i => i.length > 0);
+    if (!hasContent) return;
+
+    const timeout = setTimeout(() => {
+      saveToLocalStorage();
+    }, 2000);
+
+    return () => clearTimeout(timeout);
+  }, [allFloorShapes, allFloorItems, saveToLocalStorage]);
+
+  // Check for saved state on mount
+  useEffect(() => {
+    // Don't show restore prompt if loading from URL
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('d')) return;
+
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const state = JSON.parse(saved);
+        const hasContent = Object.values(state.allFloorShapes || {}).some(s => s.length > 0) ||
+                          Object.values(state.allFloorItems || {}).some(i => i.length > 0);
+        if (hasContent) {
+          setSavedStateAvailable(true);
+          setShowRestorePrompt(true);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to check localStorage:', e);
+    }
+  }, []);
+
+  // Restore state from localStorage
+  const restoreFromLocalStorage = useCallback(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const state = JSON.parse(saved);
+        if (state.allFloorShapes) setAllFloorShapes(state.allFloorShapes);
+        if (state.allFloorItems) setAllFloorItems(state.allFloorItems);
+        if (state.currentFloor !== undefined) setCurrentFloor(state.currentFloor);
+        if (state.buildingType) setBuildingType(state.buildingType);
+        if (state.fiefMode !== undefined) setFiefMode(state.fiefMode);
+        if (state.fiefType) setFiefType(state.fiefType);
+        if (state.fiefWidth) setFiefWidth(state.fiefWidth);
+        if (state.fiefHeight) setFiefHeight(state.fiefHeight);
+        if (state.fiefPosition) setFiefPosition(state.fiefPosition);
+        if (state.claimedAreas) setClaimedAreas(state.claimedAreas);
+        if (state.stakesInventory !== undefined) setStakesInventory(state.stakesInventory);
+        if (state.leftClickShape) setLeftClickShape(state.leftClickShape);
+        if (state.rightClickShape) setRightClickShape(state.rightClickShape);
+        if (state.middleClickAction) setMiddleClickAction(state.middleClickAction);
+        if (state.gridEnabled !== undefined) setGridEnabled(state.gridEnabled);
+        showToast('Design restored!', 'success');
+      }
+    } catch (e) {
+      console.warn('Failed to restore from localStorage:', e);
+      showToast('Failed to restore design', 'error');
+    }
+    setShowRestorePrompt(false);
+  }, [showToast]);
+
+  // Dismiss restore prompt (Start Fresh)
+  const dismissRestorePrompt = useCallback(() => {
+    setShowRestorePrompt(false);
+    setSkipNextSave(true);
+    localStorage.removeItem(STORAGE_KEY);
+  }, []);
 
   // =====================================================
   // SHARE FUNCTIONALITY
@@ -374,24 +811,107 @@ export default function App() {
         if (decompressed) {
           const state = JSON.parse(decompressed);
 
-          // Detect format: ultra-compact (arrays), compact (objects with t/v), or old (shapes key)
-          if (state.s && state.s.length > 0) {
+          // Type maps for different formats
+          const typeFromCode = ['square', 'triangle', 'corner', 'stair'];
+          const typeFromChar = { s: 'square', t: 'triangle', c: 'corner', st: 'stair' };
+          const buildingFromCode = ['atreides', 'harkonnen', 'choamShelter', 'choamFacility'];
+          const buildingFromChar = { a: 'atreides', h: 'harkonnen', cs: 'choamShelter', cf: 'choamFacility' };
+          const shapeFromCode = ['square', 'triangle', 'corner', 'delete', 'stair'];
+          const shapeFromChar = { s: 'square', t: 'triangle', c: 'corner', d: 'delete', st: 'stair' };
+          const dirFromCode = ['top', 'bottom', 'left', 'right'];
+          const dirFromChar = { t: 'top', b: 'bottom', l: 'left', r: 'right' };
+
+          // Get default building type from state (for backward compatibility)
+          const defaultBuilding = state.b !== undefined
+            ? (typeof state.b === 'number' ? buildingFromCode[state.b] : buildingFromChar[state.b] || 'atreides')
+            : 'atreides';
+
+          // Helper to expand compressed shapes
+          const expandCompressedShapes = (compressedShapes, startId = 0) => {
+            if (!compressedShapes || compressedShapes.length === 0) return [];
+            const isUltraCompact = Array.isArray(compressedShapes[0]);
+            return compressedShapes.map((s, i) => {
+              let type, verts = [], building = defaultBuilding;
+              if (isUltraCompact) {
+                type = typeFromCode[s[0]] || 'square';
+                let vertStart = 1;
+                if (s.length >= 2 && s[1] >= 0 && s[1] <= 3 && (s.length - 2) % 2 === 0) {
+                  building = buildingFromCode[s[1]] || defaultBuilding;
+                  vertStart = 2;
+                }
+                for (let j = vertStart; j < s.length; j += 2) {
+                  verts.push({ x: s[j], y: s[j + 1] });
+                }
+              } else {
+                type = typeFromChar[s.t] || 'square';
+                if (s.b !== undefined) {
+                  building = typeof s.b === 'number' ? buildingFromCode[s.b] : buildingFromChar[s.b] || defaultBuilding;
+                }
+                if (s.v && s.v.length >= 4) {
+                  for (let j = 0; j < s.v.length; j += 2) {
+                    verts.push({ x: s.v[j], y: s.v[j + 1] });
+                  }
+                }
+              }
+              const cx = verts.length > 0 ? verts.reduce((sum, v) => sum + v.x, 0) / verts.length : 0;
+              const cy = verts.length > 0 ? verts.reduce((sum, v) => sum + v.y, 0) / verts.length : 0;
+              let rotation = 0;
+              if (verts.length >= 2) {
+                if (type === 'square' || type === 'stair') {
+                  const dx = verts[1].x - verts[0].x;
+                  const dy = verts[1].y - verts[0].y;
+                  rotation = (Math.atan2(dy, dx) * 180 / Math.PI) + 180;
+                } else if (type === 'corner') {
+                  const dx = verts[1].x - verts[0].x;
+                  const dy = verts[1].y - verts[0].y;
+                  rotation = Math.atan2(dy, dx) * 180 / Math.PI;
+                } else {
+                  const dx = verts[0].x - cx;
+                  const dy = verts[0].y - cy;
+                  rotation = (Math.atan2(dy, dx) * 180 / Math.PI) + 90;
+                }
+              }
+              return { id: Date.now() + startId + i, type, x: cx, y: cy, rotation, building, _verts: verts };
+            });
+          };
+
+          // Helper to expand compressed items
+          const expandCompressedItems = (compressedItems, startId = 0) => {
+            if (!compressedItems || compressedItems.length === 0) return [];
+            return compressedItems.map((item, i) => ({
+              id: Date.now() + startId + i,
+              itemType: item[0],
+              x: item[1],
+              y: item[2],
+            }));
+          };
+
+          // Check for multi-floor format first
+          if (state.fs || state.fi) {
+            // Multi-floor format
+            const newFloorShapes = { 0: [] };
+            const newFloorItems = { 0: [] };
+            let idOffset = 0;
+
+            if (state.fs) {
+              for (const [floor, shapes] of Object.entries(state.fs)) {
+                newFloorShapes[parseInt(floor)] = expandCompressedShapes(shapes, idOffset);
+                idOffset += shapes.length;
+              }
+            }
+            if (state.fi) {
+              for (const [floor, items] of Object.entries(state.fi)) {
+                newFloorItems[parseInt(floor)] = expandCompressedItems(items, 2000 + idOffset);
+                idOffset += items.length;
+              }
+            }
+
+            setAllFloorShapes(newFloorShapes);
+            setAllFloorItems(newFloorItems);
+            if (state.cf !== undefined) setCurrentFloor(state.cf);
+          } else if (state.s && state.s.length > 0) {
+            // Single floor format (backward compatible)
             const isUltraCompact = Array.isArray(state.s[0]);
-
-            // Type maps for different formats
-            const typeFromCode = ['square', 'triangle', 'corner'];
-            const typeFromChar = { s: 'square', t: 'triangle', c: 'corner' };
-            const buildingFromCode = ['atreides', 'harkonnen', 'choamShelter', 'choamFacility'];
-            const buildingFromChar = { a: 'atreides', h: 'harkonnen', cs: 'choamShelter', cf: 'choamFacility' };
-            const shapeFromCode = ['square', 'triangle', 'corner', 'delete'];
-            const shapeFromChar = { s: 'square', t: 'triangle', c: 'corner', d: 'delete' };
-            const dirFromCode = ['top', 'bottom', 'left', 'right'];
-            const dirFromChar = { t: 'top', b: 'bottom', l: 'left', r: 'right' };
-
-            // Get default building type from state (for backward compatibility)
-            const defaultBuilding = state.b !== undefined
-              ? (typeof state.b === 'number' ? buildingFromCode[state.b] : buildingFromChar[state.b] || 'atreides')
-              : 'atreides';
 
             // Restore shapes from vertex data
             const expandedShapes = state.s.map((s, i) => {
@@ -429,7 +949,7 @@ export default function App() {
               // Calculate rotation from vertices
               let rotation = 0;
               if (verts.length >= 2) {
-                if (type === 'square') {
+                if (type === 'square' || type === 'stair') {
                   const dx = verts[1].x - verts[0].x;
                   const dy = verts[1].y - verts[0].y;
                   rotation = (Math.atan2(dy, dx) * 180 / Math.PI) + 180;
@@ -467,8 +987,8 @@ export default function App() {
               setRightClickShape(typeof state.r === 'number' ? shapeFromCode[state.r] : shapeFromChar[state.r] || 'triangle');
             }
             if (state.m !== undefined) {
-              // New format: middle click action (0=square, 1=triangle, 2=corner, 3=delete)
-              const actionFromCode = ['square', 'triangle', 'corner', 'delete'];
+              // New format: middle click action (0=square, 1=triangle, 2=corner, 3=delete, 4=stair)
+              const actionFromCode = ['square', 'triangle', 'corner', 'delete', 'stair'];
               setMiddleClickAction(actionFromCode[state.m] || 'delete');
             }
             if (state.fm !== undefined) setFiefMode(state.fm === 1);
@@ -531,16 +1051,20 @@ export default function App() {
 
   // Compress state for sharing (ultra-compact format)
   const getCompressedState = useCallback(() => {
-    // Ultra-compact shape format: [type, building, x1, y1, x2, y2, ...] as flat array with integers
-    const minShapes = shapes.map(s => {
+    // Helper to compress shapes for a floor
+    const compressShapes = (floorShapes) => floorShapes.map(s => {
       const verts = s._verts || [];
-      // First element is type code (0=square, 1=triangle, 2=corner)
-      // Second element is building code (0=atreides, 1=harkonnen, 2=choamShelter, 3=choamFacility)
-      // Rest are integer coordinates
-      const typeCode = s.type === 'square' ? 0 : s.type === 'triangle' ? 1 : 2;
+      const typeCode = s.type === 'square' ? 0 : s.type === 'triangle' ? 1 : s.type === 'corner' ? 2 : s.type === 'stair' ? 3 : 0;
       const buildingCode = s.building === 'atreides' ? 0 : s.building === 'harkonnen' ? 1 : s.building === 'choamShelter' ? 2 : s.building === 'choamFacility' ? 3 : 0;
       return [typeCode, buildingCode, ...verts.flatMap(pt => [Math.round(pt.x), Math.round(pt.y)])];
     });
+
+    // Helper to compress items for a floor
+    const compressItems = (floorItems) => floorItems.map(item => [
+      item.itemType,
+      Math.round(item.x),
+      Math.round(item.y),
+    ]);
 
     // Minimal claimed areas as arrays [direction, parentId]
     const minClaimed = claimedAreas.map(a => [
@@ -548,16 +1072,46 @@ export default function App() {
       a.parentId === 'main' ? 0 : a.parentId,
     ]);
 
-    // Build state object, only including non-default values
-    const state = { s: minShapes };
+    // Check if we have multiple floors with data
+    const floorsWithShapes = Object.entries(allFloorShapes).filter(([_, s]) => s.length > 0);
+    const floorsWithItems = Object.entries(allFloorItems).filter(([_, i]) => i.length > 0);
+    const hasMultipleFloors = floorsWithShapes.length > 1 || floorsWithItems.length > 1 ||
+      floorsWithShapes.some(([f]) => f !== '0') || floorsWithItems.some(([f]) => f !== '0');
+
+    // Build state object
+    const state = {};
+
+    if (hasMultipleFloors) {
+      // Multi-floor format: fs = {floorNum: shapes}, fi = {floorNum: items}
+      const fs = {};
+      const fi = {};
+      for (const [floor, floorShapes] of Object.entries(allFloorShapes)) {
+        if (floorShapes.length > 0) {
+          fs[floor] = compressShapes(floorShapes);
+        }
+      }
+      for (const [floor, floorItems] of Object.entries(allFloorItems)) {
+        if (floorItems.length > 0) {
+          fi[floor] = compressItems(floorItems);
+        }
+      }
+      if (Object.keys(fs).length > 0) state.fs = fs;
+      if (Object.keys(fi).length > 0) state.fi = fi;
+      if (currentFloor !== 0) state.cf = currentFloor;
+    } else {
+      // Single floor format (backward compatible)
+      state.s = compressShapes(allFloorShapes[0] || []);
+      if ((allFloorItems[0] || []).length > 0) {
+        state.pi = compressItems(allFloorItems[0]);
+      }
+    }
 
     // Building type: 0=atreides, 1=harkonnen, 2=choamShelter, 3=choamFacility
     const btCode = buildingType === 'atreides' ? 0 : buildingType === 'harkonnen' ? 1 : buildingType === 'choamShelter' ? 2 : 3;
     if (btCode !== 0) state.b = btCode;
 
     // Only include if different from defaults
-    // Shape codes: 0=square, 1=triangle, 2=corner, 3=delete
-    const shapeToCode = { square: 0, triangle: 1, corner: 2, delete: 3 };
+    const shapeToCode = { square: 0, triangle: 1, corner: 2, delete: 3, stair: 4 };
     if (leftClickShape !== 'square') state.l = shapeToCode[leftClickShape];
     if (rightClickShape !== 'triangle') state.r = shapeToCode[rightClickShape];
     if (middleClickAction !== 'delete') state.m = shapeToCode[middleClickAction];
@@ -573,17 +1127,8 @@ export default function App() {
       if (minClaimed.length > 0) state.ca = minClaimed;
     }
 
-    // Placed items: compact format [itemType, x, y]
-    if (placedItems.length > 0) {
-      state.pi = placedItems.map(item => [
-        item.itemType,
-        Math.round(item.x),
-        Math.round(item.y),
-      ]);
-    }
-
     return LZString.compressToEncodedURIComponent(JSON.stringify(state));
-  }, [shapes, buildingType, leftClickShape, rightClickShape, middleClickAction, fiefMode, fiefPosition, fiefType, fiefWidth, fiefHeight, fiefPadding, stakesInventory, claimedAreas, placedItems]);
+  }, [allFloorShapes, allFloorItems, currentFloor, buildingType, leftClickShape, rightClickShape, middleClickAction, fiefMode, fiefPosition, fiefType, fiefWidth, fiefHeight, fiefPadding, stakesInventory, claimedAreas]);
 
   // Generate and copy share link
   const handleCopyLink = useCallback(() => {
@@ -1045,7 +1590,7 @@ export default function App() {
     const rad = (rotation * Math.PI) / 180;
 
     let localVerts;
-    if (type === 'square') {
+    if (type === 'square' || type === 'stair') {
       const h = SHAPE_SIZE / 2;
       localVerts = [
         { x: -h, y: -h }, { x: h, y: -h },
@@ -1187,6 +1732,7 @@ export default function App() {
       const sqCount = shapes.filter(s => s.type === 'square').length;
       const triCount = shapes.filter(s => s.type === 'triangle').length;
       const cornCount = shapes.filter(s => s.type === 'corner').length;
+      const stairCount = shapes.filter(s => s.type === 'stair').length;
 
       // Calculate costs per material type
       const exportMaterialCosts = shapes.reduce((acc, shape) => {
@@ -1345,7 +1891,7 @@ export default function App() {
       const descLines = [
         `**Building Style:** ${currentBuilding.label}`,
         `**Pieces:** ${shapes.length} total`,
-        `  • ${sqCount} squares, ${triCount} triangles, ${cornCount} corners`,
+        `  • ${sqCount} squares, ${triCount} triangles, ${cornCount} corners, ${stairCount} stairs`,
         `**Material Cost:** ${costString}`,
       ];
       if (fiefMode) {
@@ -1527,7 +2073,7 @@ export default function App() {
   const calculateSnappedVertices = useCallback((edge, shapeType, mouseX = null, mouseY = null) => {
     const { v1, v2, nx, ny, midX, midY, ux, uy } = edge;
 
-    if (shapeType === 'square') {
+    if (shapeType === 'square' || shapeType === 'stair') {
       const offsetX = nx * SHAPE_SIZE;
       const offsetY = ny * SHAPE_SIZE;
       return [
@@ -1594,7 +2140,7 @@ export default function App() {
     const cy = verts.reduce((s, v) => s + v.y, 0) / verts.length;
 
     let rotation = 0;
-    if (shapeType === 'square') {
+    if (shapeType === 'square' || shapeType === 'stair') {
       const dx = verts[1].x - verts[0].x;
       const dy = verts[1].y - verts[0].y;
       rotation = (Math.atan2(dy, dx) * 180 / Math.PI) + 180;
@@ -1738,7 +2284,7 @@ export default function App() {
   // Helper to get free-place vertices for a shape type
   const getFreeVertices = useCallback((px, py, shapeType) => {
     const h = SHAPE_SIZE / 2;
-    if (shapeType === 'square') {
+    if (shapeType === 'square' || shapeType === 'stair') {
       return [
         { x: px - h, y: py - h }, { x: px + h, y: py - h },
         { x: px + h, y: py + h }, { x: px - h, y: py + h },
@@ -1758,6 +2304,10 @@ export default function App() {
     const rect = e.currentTarget.getBoundingClientRect();
     const screenX = e.clientX - rect.left;
     const screenY = e.clientY - rect.top;
+
+    // Track mouse position in world coordinates for paste operations
+    const worldPos = screenToWorld(screenX, screenY);
+    mousePositionRef.current = worldPos;
 
     if (isPanning) {
       setPan({ x: screenX - panStart.x, y: screenY - panStart.y });
@@ -2182,18 +2732,21 @@ export default function App() {
   }, [isRotating, rotatingButton, baseVertices, rotationAngle, rotationShapeType, rotateVertices, checkOverlap, verticesToShape, middleMouseStart, middleClickAction, screenToWorld, findShapeAtPoint, buildingType, isLocked, isDraggingGroup, isRotatingGroup, draggedGroupIds, dragOffset, groupRotationAngle, groupRotationCenter, getShapesByIds, getVertices, offsetVertices, rotateVertsAroundPoint, checkGroupOverlap, findClosestEdge, getFreeVertices, calculateSnappedVertices, gridEnabled, snapVerticesToGrid, snapGroupBoundingBoxToGrid, isDraggingPlacedItem]);
 
   const handleClear = () => {
-    // Save current state to history before clearing (if there are shapes to save)
-    if (shapes.length > 0) {
-      setShapesHistory(prev => [...prev.slice(-19), shapes]); // Keep last 20 states max
+    // Save current state to history before clearing (if there are shapes/items on any floor)
+    const hasAnyShapes = Object.values(allFloorShapes).some(s => s.length > 0);
+    const hasAnyItems = Object.values(allFloorItems).some(i => i.length > 0);
+    if (hasAnyShapes || hasAnyItems) {
+      setShapesHistory(prev => [...prev.slice(-19), { shapes: allFloorShapes, items: allFloorItems }]); // Keep last 20 states max
     }
-    setShapes([]);
+    // Clear all floors
+    setAllFloorShapes({ 0: [] });
+    setAllFloorItems({ 0: [] });
+    setCurrentFloor(0);
     setHoverInfo(null);
     // Reset fief stakes
     setStakesInventory(MAX_STAKES);
     setPlacedStakes([]);
     setClaimedAreas([]);
-    // Reset placed items
-    setPlacedItems([]);
     setSelectedItemId(null);
   };
   const handleResetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
@@ -2367,6 +2920,57 @@ export default function App() {
       return renderCorner(verts, color, stroke, key, opacity, dashed, cornerStyle);
     }
 
+    // For stair type, render square with horizontal lines
+    if (shapeType === 'stair') {
+      // Calculate center from vertices
+      const centerX = verts.reduce((s, v) => s + v.x, 0) / verts.length;
+      const centerY = verts.reduce((s, v) => s + v.y, 0) / verts.length;
+
+      // Calculate rotation angle from first edge
+      const dx = verts[1].x - verts[0].x;
+      const dy = verts[1].y - verts[0].y;
+      const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+
+      // Use fixed SHAPE_SIZE for consistent line rendering regardless of rotation
+      const size = SHAPE_SIZE;
+      const numLines = 4;
+      const padding = size * 0.15;
+      const lineSpacing = (size - 2 * padding) / (numLines + 1);
+
+      return (
+        <g key={key}>
+          <polygon
+            points={verts.map(v => `${v.x},${v.y}`).join(' ')}
+            fill={color}
+            fillOpacity={opacity}
+            stroke={stroke}
+            strokeWidth={dashed ? 2 : 1.5}
+            strokeDasharray={dashed ? '5,5' : 'none'}
+            style={!dashed ? { filter: 'drop-shadow(0 1px 3px rgba(0,0,0,0.3))' } : { pointerEvents: 'none' }}
+          />
+          {/* Stair lines */}
+          {Array.from({ length: numLines }, (_, i) => {
+            const yOffset = -size/2 + padding + (i + 1) * lineSpacing;
+            return (
+              <line
+                key={`${key}-line-${i}`}
+                x1={-size * 0.35}
+                y1={yOffset}
+                x2={size * 0.35}
+                y2={yOffset}
+                stroke={stroke}
+                strokeWidth={2}
+                strokeOpacity={opacity * 0.8}
+                strokeLinecap="round"
+                transform={`translate(${centerX}, ${centerY}) rotate(${angle})`}
+                style={{ pointerEvents: 'none' }}
+              />
+            );
+          })}
+        </g>
+      );
+    }
+
     return (
       <polygon
         key={key}
@@ -2413,6 +3017,47 @@ export default function App() {
         </g>
       );
     });
+  };
+
+  // Render silhouette of floor below (faded shapes and items)
+  const renderFloorBelowSilhouette = () => {
+    if (!showSilhouette || currentFloor === 0) return null;
+
+    return (
+      <g opacity={0.25} style={{ pointerEvents: 'none' }}>
+        {/* Render shapes from floor below */}
+        {floorBelowShapes.map(shape => {
+          const verts = shape._verts || getVertices(shape);
+          const cornerStyle = BUILDING_TYPES[shape.building || 'atreides']?.cornerStyle || 'round';
+
+          // Render with gray fill
+          return (
+            <g key={`silhouette-shape-${shape.id}`}>
+              {renderPolygon(verts, '#64748b', '#475569', `sil-${shape.id}`, 1, false, shape.type, cornerStyle)}
+            </g>
+          );
+        })}
+        {/* Render items from floor below */}
+        {floorBelowItems.map(item => {
+          const itemDef = BASE_ITEMS[item.itemType];
+          if (!itemDef) return null;
+          const width = (itemDef.size?.width || 1) * ITEM_GRID_SIZE;
+          const height = (itemDef.size?.height || 1) * ITEM_GRID_SIZE;
+          return (
+            <g key={`silhouette-item-${item.id}`} transform={`translate(${item.x}, ${item.y})`}>
+              <rect
+                width={width}
+                height={height}
+                fill="#64748b"
+                stroke="#475569"
+                strokeWidth={1}
+                rx={4}
+              />
+            </g>
+          );
+        })}
+      </g>
+    );
   };
 
   // Render group being dragged or rotated
@@ -2820,6 +3465,7 @@ export default function App() {
   const squareCount = shapes.filter(s => s.type === 'square').length;
   const triangleCount = shapes.filter(s => s.type === 'triangle').length;
   const cornerCount = shapes.filter(s => s.type === 'corner').length;
+  const stairCount = shapes.filter(s => s.type === 'stair').length;
   const currentBuilding = BUILDING_TYPES[buildingType];
 
   // Calculate costs per material type based on each shape's building type
@@ -2834,7 +3480,7 @@ export default function App() {
 
   // Calculate resource totals from placed items
   const resourceTotals = useMemo(() => {
-    return placedItems.reduce((totals, placedItem) => {
+    const totals = placedItems.reduce((totals, placedItem) => {
       const itemDef = BASE_ITEMS[placedItem.itemType];
       if (!itemDef) return totals;
 
@@ -2849,7 +3495,14 @@ export default function App() {
       waterPerMinute: 0,
       waterStorage: 0,
     });
-  }, [placedItems]);
+
+    // Add fief power consumption if fief is enabled
+    if (fiefMode) {
+      totals.powerConsumed += FIEF_DEFAULTS[fiefType].power || 0;
+    }
+
+    return totals;
+  }, [placedItems, fiefMode, fiefType]);
 
   // Calculate material totals from placed items
   const materialTotals = useMemo(() => {
@@ -3055,22 +3708,18 @@ export default function App() {
   const renderItemSidebar = () => {
     return (
       <div className={`bg-slate-800 rounded-xl border-2 border-slate-700 transition-all duration-300 ${itemSidebarOpen ? 'w-56 p-4' : 'w-8 p-1'}`}>
-        {/* Toggle button */}
-        <button
-          onClick={() => setItemSidebarOpen(!itemSidebarOpen)}
-          className={`w-full flex items-center justify-center text-slate-400 hover:text-amber-400 transition-colors ${itemSidebarOpen ? 'mb-2' : 'mb-0 py-2'}`}
-          title={itemSidebarOpen ? 'Close item panel' : 'Open item panel'}
-        >
-          {itemSidebarOpen ? (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-            </svg>
-          ) : (
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-            </svg>
-          )}
-        </button>
+        {/* Toggle button (collapsed) / Header (expanded) */}
+        {itemSidebarOpen ? (
+          <div className="text-amber-400 font-bold text-center text-lg mb-3">Item Mode</div>
+        ) : (
+          <button
+            onClick={() => setItemSidebarOpen(true)}
+            className="w-full flex items-center justify-center text-amber-400 hover:text-amber-300 py-2 transition-colors"
+            title="Open item panel"
+          >
+            <span className="font-bold text-sm">&lt;&lt;</span>
+          </button>
+        )}
 
         {itemSidebarOpen && (
           <>
@@ -3164,13 +3813,13 @@ export default function App() {
               {/* Water production */}
               <div className="flex items-center justify-between text-xs mb-1">
                 <span className="text-blue-400">💧 Water/hr</span>
-                <span className="text-blue-300">{waterPerHour.toFixed(1)} L</span>
+                <span className="text-blue-300">{waterPerHour.toFixed(1)} ml</span>
               </div>
 
               {/* Water storage */}
               <div className="flex items-center justify-between text-xs">
                 <span className="text-cyan-400">🪣 Storage</span>
-                <span className="text-cyan-300">{resourceTotals.waterStorage} L</span>
+                <span className="text-cyan-300">{resourceTotals.waterStorage} ml</span>
               </div>
             </div>
 
@@ -3195,6 +3844,20 @@ export default function App() {
                 </div>
               </div>
             )}
+
+            {/* Clear Items button - only shown when items are placed */}
+            {placedItems.length > 0 && (
+              <button
+                onClick={() => setPlacedItems([])}
+                className="w-full bg-red-600/80 hover:bg-red-500 text-white text-sm py-1.5 rounded-lg transition-colors flex items-center justify-center gap-2 mt-3"
+                title="Clear all items on this floor"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Clear Items
+              </button>
+            )}
           </>
         )}
       </div>
@@ -3211,110 +3874,182 @@ export default function App() {
       </div>
 
       {/* Controls row: mouse assignments, clear, reset view, zoom */}
-      <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
-        {!itemMode && (
-          <>
-            <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-2">
-              <label className="text-blue-400 text-sm font-medium">Left:</label>
-              <select value={leftClickShape} onChange={(e) => setLeftClickShape(e.target.value)}
-                className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-blue-500">
-                <option value="square">Square</option>
-                <option value="triangle">Triangle</option>
-                <option value="corner">Corner</option>
-                <option value="delete">Delete</option>
-              </select>
-            </div>
+      {/* ml-[158px] offsets for left sidebar to center with canvas */}
+      <div className="flex flex-wrap items-center justify-center gap-2 mb-3 ml-[158px]">
+        {/* Unified controls panel */}
+        <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-3">
+          {/* Mouse button assignments */}
+          {!itemMode && (
+            <>
+              <div className="flex items-center gap-1.5">
+                {/* Left mouse button icon */}
+                <svg className="w-5 h-6" viewBox="0 0 24 32" fill="none" title="Left Click">
+                  <rect x="3" y="4" width="18" height="24" rx="9" stroke="#64748b" strokeWidth="2" fill="none" />
+                  <line x1="12" y1="4" x2="12" y2="14" stroke="#64748b" strokeWidth="1.5" />
+                  <rect x="4" y="5" width="7" height="8" rx="2" fill="#3b82f6" />
+                </svg>
+                <select value={leftClickShape} onChange={(e) => setLeftClickShape(e.target.value)}
+                  className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-blue-500">
+                  <option value="square">Square</option>
+                  <option value="triangle">Triangle</option>
+                  <option value="corner">Corner</option>
+                  <option value="stair">Stair</option>
+                  <option value="delete">Delete</option>
+                </select>
+              </div>
 
-            <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-2">
-              <label className="text-orange-400 text-sm font-medium">Right:</label>
-              <select value={rightClickShape} onChange={(e) => setRightClickShape(e.target.value)}
-                className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-orange-500">
-                <option value="square">Square</option>
-                <option value="triangle">Triangle</option>
-                <option value="corner">Corner</option>
-                <option value="delete">Delete</option>
-              </select>
-            </div>
+              <div className="flex items-center gap-1.5">
+                {/* Right mouse button icon */}
+                <svg className="w-5 h-6" viewBox="0 0 24 32" fill="none" title="Right Click">
+                  <rect x="3" y="4" width="18" height="24" rx="9" stroke="#64748b" strokeWidth="2" fill="none" />
+                  <line x1="12" y1="4" x2="12" y2="14" stroke="#64748b" strokeWidth="1.5" />
+                  <rect x="13" y="5" width="7" height="8" rx="2" fill="#f97316" />
+                </svg>
+                <select value={rightClickShape} onChange={(e) => setRightClickShape(e.target.value)}
+                  className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-orange-500">
+                  <option value="square">Square</option>
+                  <option value="triangle">Triangle</option>
+                  <option value="corner">Corner</option>
+                  <option value="stair">Stair</option>
+                  <option value="delete">Delete</option>
+                </select>
+              </div>
 
-            <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-2">
-              <label className="text-purple-400 text-sm font-medium">Middle:</label>
-              <select value={middleClickAction} onChange={(e) => setMiddleClickAction(e.target.value)}
-                className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-purple-500">
-                <option value="square">Square</option>
-                <option value="triangle">Triangle</option>
-                <option value="corner">Corner</option>
-                <option value="delete">Delete</option>
-              </select>
-            </div>
-          </>
-        )}
+              <div className="flex items-center gap-1.5">
+                {/* Middle mouse button icon */}
+                <svg className="w-5 h-6" viewBox="0 0 24 32" fill="none" title="Middle Click">
+                  <rect x="3" y="4" width="18" height="24" rx="9" stroke="#64748b" strokeWidth="2" fill="none" />
+                  <line x1="12" y1="4" x2="12" y2="14" stroke="#64748b" strokeWidth="1.5" />
+                  <rect x="9" y="5" width="6" height="8" rx="2" fill="#a855f7" />
+                </svg>
+                <select value={middleClickAction} onChange={(e) => setMiddleClickAction(e.target.value)}
+                  className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-purple-500">
+                  <option value="square">Square</option>
+                  <option value="triangle">Triangle</option>
+                  <option value="corner">Corner</option>
+                  <option value="stair">Stair</option>
+                  <option value="delete">Delete</option>
+                </select>
+              </div>
 
-        {/* Clear button */}
-        <button onClick={handleClear} disabled={shapes.length === 0}
-          className="bg-red-600/80 hover:bg-red-500 disabled:opacity-40 text-white w-8 h-8 rounded-lg text-sm transition-colors flex items-center justify-center"
-          title="Clear all shapes"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-          </svg>
-        </button>
-
-        {/* Grid toggle button */}
-        <button
-          onClick={() => setGridEnabled(!gridEnabled)}
-          className={`${gridEnabled ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-slate-700 hover:bg-slate-600'} text-white w-8 h-8 rounded-lg text-sm transition-colors flex items-center justify-center`}
-          title={gridEnabled ? 'Disable grid snap' : 'Enable grid snap'}
-        >
-          <span className="font-bold text-base">#</span>
-        </button>
-
-        {/* Lock toggle button */}
-        <button
-          onClick={() => {
-            const newLocked = !isLocked;
-            setIsLocked(newLocked);
-            setHoveredGroup([]);
-            setIsDraggingGroup(false);
-            setIsRotatingGroup(false);
-            // Close item sidebar when enabling Lock Mode (mutually exclusive)
-            if (newLocked) {
-              setItemSidebarOpen(false);
-            }
-          }}
-          className={`${isLocked ? 'bg-amber-600 hover:bg-amber-500' : 'bg-slate-700 hover:bg-slate-600'} text-white w-8 h-8 rounded-lg text-sm transition-colors flex items-center justify-center`}
-          title={isLocked ? 'Unlock to edit shapes' : 'Lock to move groups'}
-        >
-          {isLocked ? (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-          ) : (
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
-            </svg>
+              <div className="w-px h-6 bg-slate-600" />
+            </>
           )}
-        </button>
 
-        <div className="bg-slate-800 px-3 py-1.5 rounded-lg text-sm flex items-center gap-2">
-          <span className="text-slate-400">Zoom:</span>
-          <span className="text-slate-300">{Math.round(zoom * 100)}%</span>
-          {/* Reset View button */}
-          <button onClick={handleResetView}
-            className="bg-slate-700 hover:bg-slate-600 text-white w-6 h-6 rounded flex items-center justify-center ml-1"
-            title="Reset View"
+          {/* Action buttons */}
+          <button onClick={handleClear} disabled={shapes.length === 0}
+            className="bg-red-600/80 hover:bg-red-500 disabled:opacity-40 text-white w-8 h-8 rounded text-sm transition-colors flex items-center justify-center"
+            title="Clear all shapes"
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
             </svg>
           </button>
-        </div>
 
-        {/* Items button with connector line - shows when sidebar closed */}
-        {!itemSidebarOpen && (
-          <div className="relative">
+          <button
+            onClick={() => setGridEnabled(!gridEnabled)}
+            className={`${gridEnabled ? 'bg-cyan-600 hover:bg-cyan-500' : 'bg-slate-700 hover:bg-slate-600'} text-white w-8 h-8 rounded text-sm transition-colors flex items-center justify-center`}
+            title={gridEnabled ? 'Disable grid snap' : 'Enable grid snap'}
+          >
+            <span className="font-bold text-base">#</span>
+          </button>
+
+          <button
+            onClick={() => {
+              const newLocked = !isLocked;
+              setIsLocked(newLocked);
+              setHoveredGroup([]);
+              setIsDraggingGroup(false);
+              setIsRotatingGroup(false);
+              if (newLocked) {
+                setItemSidebarOpen(false);
+              }
+            }}
+            className={`${isLocked ? 'bg-amber-600 hover:bg-amber-500' : 'bg-slate-700 hover:bg-slate-600'} text-white w-8 h-8 rounded text-sm transition-colors flex items-center justify-center`}
+            title={isLocked ? 'Unlock to edit shapes' : 'Lock to move groups'}
+          >
+            {isLocked ? (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+            ) : (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z" />
+              </svg>
+            )}
+          </button>
+
+          <div className="w-px h-6 bg-slate-600" />
+
+          {/* Floor selector */}
+          <div className="flex items-center gap-1.5">
+            {/* Layers/floors icon */}
+            <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" title="Floor">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" fill="#10b981" opacity="0.3" />
+              <path d="M2 12l10 5 10-5" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M2 17l10 5 10-5" stroke="#10b981" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+            <select
+              value={currentFloor}
+              onChange={(e) => setCurrentFloor(parseInt(e.target.value))}
+              className="bg-slate-700 text-white text-sm px-2 py-1 rounded border border-slate-600 focus:outline-none focus:border-emerald-500"
+            >
+              {Array.from({ length: 10 }, (_, i) => (
+                <option key={i} value={i}>
+                  {i + 1}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={() => setShowSilhouette(!showSilhouette)}
+              className={`${showSilhouette ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-slate-700 hover:bg-slate-600'} text-white w-6 h-6 rounded flex items-center justify-center`}
+              title={showSilhouette ? 'Hide floor below silhouette' : 'Show floor below silhouette'}
+              disabled={currentFloor === 0}
+              style={{ opacity: currentFloor === 0 ? 0.4 : 1 }}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              </svg>
+            </button>
+          </div>
+
+          <div className="w-px h-6 bg-slate-600" />
+
+          {/* Zoom */}
+          <div className="flex items-center gap-1.5">
+            {/* Magnifying glass icon */}
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" title="Zoom">
+              <circle cx="11" cy="11" r="7" stroke="#94a3b8" strokeWidth="2" />
+              <path d="M21 21l-4.35-4.35" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" />
+            </svg>
+            <span className="text-slate-300 text-sm">{Math.round(zoom * 100)}%</span>
+            <button onClick={handleResetView}
+              className="bg-slate-700 hover:bg-slate-600 text-white w-6 h-6 rounded flex items-center justify-center"
+              title="Reset View"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Items / Back to Design Mode button */}
+          <div className="w-px h-6 bg-slate-600" />
+          {itemSidebarOpen ? (
+            <button
+              onClick={() => setItemSidebarOpen(false)}
+              className="bg-amber-500 hover:bg-amber-400 text-slate-900 font-medium px-3 py-1 rounded text-sm flex items-center gap-1.5 transition-colors"
+              title="Back to Design Mode"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+              </svg>
+              Back to Design Mode
+            </button>
+          ) : (
             <button
               onClick={() => setItemSidebarOpen(true)}
-              className="bg-amber-500 hover:bg-amber-400 text-slate-900 font-medium px-3 py-1.5 rounded-lg text-sm flex items-center gap-1.5 transition-colors"
+              className="bg-amber-500 hover:bg-amber-400 text-slate-900 font-medium px-3 py-1 rounded text-sm flex items-center gap-1.5 transition-colors"
               title="Open item placement panel"
             >
               Items
@@ -3322,32 +4057,16 @@ export default function App() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M14 5l7 7m0 0l-7 7m7-7H3" />
               </svg>
             </button>
-            {/* Connector line pointing to item panel */}
-            <svg
-              className="absolute pointer-events-none"
-              style={{ top: '50%', left: '100%', width: '150px', height: '70px', marginLeft: '4px', marginTop: '-8px' }}
-              viewBox="0 0 150 70"
-              fill="none"
-            >
-              <path
-                d="M 0 8 L 120 8 Q 137 8 137 28 L 137 39"
-                stroke="rgb(245 158 11 / 0.4)"
-                strokeWidth="2"
-                strokeDasharray="6 4"
-                strokeLinecap="round"
-              />
-              <circle cx="137" cy="39" r="4" fill="rgb(245 158 11 / 0.5)" />
-            </svg>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="flex gap-4">
         {/* Left Sidebar - Building Type & Fief Controls */}
-        <div className="bg-slate-800 rounded-xl p-4 w-48 flex flex-col gap-3 border-2 border-slate-700">
+        <div className="bg-slate-800 rounded-xl border-2 border-slate-700 w-48 p-4">
           {/* Building Type */}
-          <div className="flex flex-col gap-1">
-            <label className="text-slate-300 font-medium text-sm">Building Type</label>
+          <div className="text-slate-300 font-bold text-center text-lg mb-3">Building Type</div>
+          <div className="flex flex-col gap-1 mb-3">
             <select value={buildingType} onChange={(e) => setBuildingType(e.target.value)}
               className="bg-slate-700 text-white text-sm px-2 py-1.5 rounded border border-slate-600 focus:outline-none focus:border-amber-500">
               {Object.entries(BUILDING_TYPES).map(([key, bt]) => (
@@ -3356,7 +4075,8 @@ export default function App() {
             </select>
           </div>
 
-          <div className="text-slate-300 font-medium text-sm border-t border-slate-600 pt-3">Fief</div>
+          {/* Place Fief */}
+          <div className="text-blue-400 font-bold text-center text-lg mb-3 border-t border-slate-600 pt-3">Place Fief</div>
 
           {/* Draggable Fief Images */}
           <div className="flex gap-2">
@@ -3403,7 +4123,7 @@ export default function App() {
               <span className="text-xs text-slate-400">Advanced</span>
             </div>
           </div>
-          <p className="text-slate-500 text-xs">Drag onto canvas to place</p>
+          <p className="text-slate-500 text-xs mt-2">Drag onto canvas to place</p>
 
           {/* Fief Settings - shown when fief is placed */}
           {fiefMode && fiefPosition && (
@@ -3411,7 +4131,7 @@ export default function App() {
               {/* Clear Fief Button */}
               <button
                 onClick={handleClearFief}
-                className="w-full bg-red-600/80 hover:bg-red-500 text-white text-sm py-1.5 rounded-lg transition-colors flex items-center justify-center gap-2"
+                className="w-full bg-red-600/80 hover:bg-red-500 text-white text-sm py-1.5 rounded-lg transition-colors flex items-center justify-center gap-2 mt-3"
                 title="Remove fief"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3420,12 +4140,12 @@ export default function App() {
                 Clear Fief
               </button>
 
-              <div className="text-slate-300 text-xs font-medium">
+              <div className="text-slate-300 text-xs font-medium mt-2">
                 {fiefType === 'standard' ? 'Standard' : 'Advanced'} Fief ({fiefWidth} x {fiefHeight})
               </div>
 
               {/* Size Adjusters */}
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1 mt-2">
                 <label className="text-slate-400 text-xs">Width (cells)</label>
                 <input
                   type="number"
@@ -3438,7 +4158,7 @@ export default function App() {
                 />
               </div>
 
-              <div className="flex flex-col gap-1">
+              <div className="flex flex-col gap-1 mt-2">
                 <label className="text-slate-400 text-xs">Height (cells)</label>
                 <input
                   type="number"
@@ -3452,16 +4172,15 @@ export default function App() {
               </div>
 
               {/* Stakes Section */}
-              <div className="border-t border-slate-600 pt-2 mt-1">
+              <div className="border-t border-slate-600 pt-2 mt-3">
                 <div className="text-slate-300 font-medium text-sm mb-2">Stakes ({stakesInventory}/{MAX_STAKES})</div>
                 <div className="flex flex-wrap gap-2">
                   {Array.from({ length: MAX_STAKES }).map((_, i) => {
                     const isAvailable = i < stakesInventory;
-                    const usedIndex = i - stakesInventory; // Which claimed area this represents
+                    const usedIndex = i - stakesInventory;
                     const claimedArea = !isAvailable ? claimedAreas[usedIndex] : null;
 
                     if (isAvailable) {
-                      // Available stake - can be dragged
                       return (
                         <div
                           key={i}
@@ -3475,13 +4194,11 @@ export default function App() {
                         </div>
                       );
                     } else {
-                      // Used stake - grayed out, click to remove claim
                       return (
                         <div
                           key={i}
                           onClick={() => {
                             if (claimedArea) {
-                              // Remove the claimed area and restore the stake
                               setClaimedAreas(prev => prev.filter(a => a.id !== claimedArea.id));
                               setStakesInventory(prev => prev + 1);
                             }
@@ -3502,7 +4219,7 @@ export default function App() {
 
               {/* Claimed Areas Count */}
               {claimedAreas.length > 0 && (
-                <div className="text-xs text-slate-400">
+                <div className="text-xs text-slate-400 mt-2">
                   Claimed areas: {claimedAreas.length + 1}
                 </div>
               )}
@@ -3536,6 +4253,7 @@ export default function App() {
             {renderGrid()}
             {renderFiefAreas()}
             {renderStakeDropZones()}
+            {renderFloorBelowSilhouette()}
             {renderShapes()}
             {renderPlacedItems()}
             {renderHoverPreview()}
@@ -3559,8 +4277,16 @@ export default function App() {
       </div>
 
       {/* Instructions bar with Share/Discord on right */}
-      <div className="w-full max-w-4xl flex items-center justify-between mt-3 bg-slate-800/50 px-4 py-2 rounded-lg">
+      <div className="w-full max-w-4xl flex items-center justify-between mt-3 bg-slate-800/50 px-4 py-2 rounded-lg ml-[158px]">
         <div className="flex items-center gap-3">
+          {/* Help button */}
+          <button
+            onClick={() => setShowHelpModal(true)}
+            className="bg-green-600 hover:bg-green-500 text-white w-7 h-7 rounded-lg text-base font-bold transition-colors flex items-center justify-center flex-shrink-0"
+            title="Help (Press ? or H)"
+          >
+            ?
+          </button>
           {gridEnabled && (
             <span className="text-cyan-400 font-medium text-sm">Grid Snap</span>
           )}
@@ -3575,10 +4301,11 @@ export default function App() {
           ) : isLocked ? (
             <p className="text-slate-400 text-sm">
               <span className="text-amber-400 font-medium">Lock Mode:</span>
-              <span className="text-slate-400 ml-2">Drag</span> Move Group ·
-              <span className="text-slate-400 ml-2">Shift+Drag</span> Rotate Group ·
-              <span className="text-slate-400 ml-2">Scroll</span> Zoom ·
-              <span className="text-slate-400 ml-2">Middle Drag</span> Pan
+              <span className="text-slate-400 ml-2">Drag</span> Move ·
+              <span className="text-slate-400 ml-2">Shift+Drag</span> Rotate ·
+              <span className="text-slate-400 ml-2">Ctrl+C</span> Copy ·
+              <span className="text-slate-400 ml-2">Ctrl+V</span> Paste ·
+              <span className="text-slate-400 ml-2">Scroll</span> Zoom
             </p>
           ) : (
             <p className="text-slate-400 text-sm">
@@ -3667,6 +4394,7 @@ export default function App() {
           <span className="text-blue-400 font-medium">{squareCount}</span><span className="text-slate-500">□</span>
           <span className="text-orange-400 font-medium">{triangleCount}</span><span className="text-slate-500">△</span>
           <span className="text-green-400 font-medium">{cornerCount}</span><span className="text-slate-500">◗</span>
+          <span className="text-purple-400 font-medium">{stairCount}</span><span className="text-slate-500">≡</span>
           <span className="text-slate-400 ml-2">Total:</span>
           <span className="text-white font-medium">{shapes.length}</span>
         </div>
@@ -3692,12 +4420,188 @@ export default function App() {
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="mt-3 text-center">
-        <p className="text-slate-500 text-sm">
-          Dune: Awakening Base Planner • A <a href="https://www.holidyspice.com" target="_blank" rel="noopener noreferrer" className="text-amber-500 hover:text-amber-400 underline">Holidy Spice</a> Community Tool
-        </p>
+      {/* Toast Notifications */}
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            className={`px-4 py-3 rounded-lg shadow-lg text-white text-sm flex items-center gap-2 animate-slide-in ${
+              toast.type === 'success' ? 'bg-green-600' :
+              toast.type === 'error' ? 'bg-red-600' :
+              toast.type === 'warning' ? 'bg-amber-600' :
+              'bg-slate-700'
+            }`}
+          >
+            {toast.type === 'success' && (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              </svg>
+            )}
+            {toast.type === 'error' && (
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            )}
+            {toast.message}
+          </div>
+        ))}
       </div>
+
+      {/* Restore Session Prompt */}
+      {showRestorePrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-slate-800 rounded-xl p-6 shadow-2xl border-2 border-slate-700 max-w-md">
+            <h3 className="text-xl font-bold text-white mb-3">Welcome Back!</h3>
+            <p className="text-slate-300 mb-4">
+              We found a saved design from your last session. Would you like to continue where you left off?
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={restoreFromLocalStorage}
+                className="flex-1 bg-amber-600 hover:bg-amber-500 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              >
+                Restore Design
+              </button>
+              <button
+                onClick={dismissRestorePrompt}
+                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+              >
+                Start Fresh
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Help Modal */}
+      {showHelpModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowHelpModal(false)}>
+          <div className="bg-slate-800 rounded-xl p-6 shadow-2xl border-2 border-slate-700 max-w-2xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-xl font-bold text-white">Keyboard Shortcuts & Help</h3>
+              <button onClick={() => setShowHelpModal(false)} className="text-slate-400 hover:text-white">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* General */}
+              <div>
+                <h4 className="text-amber-400 font-medium mb-2">General</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Help</span>
+                    <kbd className="bg-slate-600 px-2 py-0.5 rounded text-xs text-white">?</kbd>
+                  </div>
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Undo</span>
+                    <kbd className="bg-slate-600 px-2 py-0.5 rounded text-xs text-white">Ctrl+Z</kbd>
+                  </div>
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Toggle Grid</span>
+                    <kbd className="bg-slate-600 px-2 py-0.5 rounded text-xs text-white">G</kbd>
+                  </div>
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Toggle Lock Mode</span>
+                    <kbd className="bg-slate-600 px-2 py-0.5 rounded text-xs text-white">L</kbd>
+                  </div>
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Close/Cancel</span>
+                    <kbd className="bg-slate-600 px-2 py-0.5 rounded text-xs text-white">Esc</kbd>
+                  </div>
+                </div>
+              </div>
+
+              {/* Design Mode */}
+              <div>
+                <h4 className="text-blue-400 font-medium mb-2">Design Mode</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Place Shape</span>
+                    <span className="text-slate-400 text-xs">Left/Right Click</span>
+                  </div>
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Rotate Shape</span>
+                    <span className="text-slate-400 text-xs">Hold + Drag</span>
+                  </div>
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Quick Place</span>
+                    <span className="text-slate-400 text-xs">Middle Click</span>
+                  </div>
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Pan Canvas</span>
+                    <span className="text-slate-400 text-xs">Middle Drag</span>
+                  </div>
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Zoom</span>
+                    <span className="text-slate-400 text-xs">Scroll Wheel</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Lock Mode */}
+              <div>
+                <h4 className="text-amber-400 font-medium mb-2">Lock Mode (Move Groups)</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Move Group</span>
+                    <span className="text-slate-400 text-xs">Drag</span>
+                  </div>
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Rotate Group</span>
+                    <span className="text-slate-400 text-xs">Shift + Drag</span>
+                  </div>
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Copy Group</span>
+                    <kbd className="bg-slate-600 px-2 py-0.5 rounded text-xs text-white">Ctrl+C</kbd>
+                  </div>
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Paste Group</span>
+                    <kbd className="bg-slate-600 px-2 py-0.5 rounded text-xs text-white">Ctrl+V</kbd>
+                  </div>
+                </div>
+              </div>
+
+              {/* Item Mode */}
+              <div>
+                <h4 className="text-purple-400 font-medium mb-2">Item Mode</h4>
+                <div className="grid grid-cols-2 gap-2 text-sm">
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Select Item</span>
+                    <span className="text-slate-400 text-xs">Click</span>
+                  </div>
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Move Item</span>
+                    <span className="text-slate-400 text-xs">Drag</span>
+                  </div>
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Delete Item</span>
+                    <span className="text-slate-400 text-xs">Right-click / Del</span>
+                  </div>
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Deselect</span>
+                    <kbd className="bg-slate-600 px-2 py-0.5 rounded text-xs text-white">Esc</kbd>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tips */}
+              <div className="border-t border-slate-600 pt-4">
+                <h4 className="text-green-400 font-medium mb-2">Tips</h4>
+                <ul className="text-sm text-slate-300 space-y-1">
+                  <li>• Your design auto-saves every 30 seconds</li>
+                  <li>• Use the Share button to get a link to your design</li>
+                  <li>• Drag fiefs and stakes from the left panel</li>
+                  <li>• Connected shapes become groups in Lock Mode</li>
+                  <li>• Use multiple floors for multi-story buildings</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
