@@ -3874,8 +3874,8 @@ export default function App() {
       </div>
 
       {/* Controls row: mouse assignments, clear, reset view, zoom */}
-      {/* ml-[159px] offsets for left sidebar to center over canvas */}
-      <div className="flex flex-wrap items-center justify-center gap-2 mb-3 ml-[159px]">
+      {/* ml-[144px] offsets for left sidebar to center over canvas */}
+      <div className="flex flex-wrap items-center justify-center gap-2 mb-3 ml-[144px]">
         {/* Unified controls panel */}
         <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-3">
           {/* Mouse button assignments */}
@@ -4278,8 +4278,8 @@ export default function App() {
       </div>
 
       {/* Instructions bar with Share/Discord on right */}
-      {/* ml-[159px] offsets for left sidebar to center over canvas */}
-      <div className="flex items-center justify-between mt-3 bg-slate-800/50 px-4 py-2 rounded-lg ml-[159px]" style={{ width: '900px' }}>
+      {/* ml-[144px] offsets for left sidebar to center over canvas */}
+      <div className="flex items-center justify-between mt-3 bg-slate-800/50 px-4 py-2 rounded-lg ml-[144px]" style={{ width: '900px' }}>
         <div className="flex items-center gap-3">
           {/* Help button */}
           <button
@@ -4390,8 +4390,8 @@ export default function App() {
       )}
 
       {/* Stats row below canvas */}
-      {/* ml-[159px] offsets for left sidebar to center over canvas */}
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-4 ml-[159px]">
+      {/* ml-[144px] offsets for left sidebar to center over canvas */}
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-4 ml-[144px]">
         <div className="bg-slate-800 px-4 py-2 rounded-lg text-sm flex items-center gap-3">
           <span className="text-slate-400">Pieces:</span>
           <span className="text-blue-400 font-medium">{squareCount}</span><span className="text-slate-500">□</span>
