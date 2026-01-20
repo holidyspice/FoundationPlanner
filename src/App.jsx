@@ -756,14 +756,18 @@ export default function App() {
     const cx = groupShapes.reduce((sum, s) => sum + s.x, 0) / groupShapes.length;
     const cy = groupShapes.reduce((sum, s) => sum + s.y, 0) / groupShapes.length;
 
-    // Store shapes with relative positions (normalized to centroid)
-    const patternShapes = groupShapes.map(s => ({
-      type: s.type,
-      building: s.building || 'atreides',
-      relX: s.x - cx,
-      relY: s.y - cy,
-      rotation: s.rotation,
-    }));
+    // Store shapes with relative positions and vertices (normalized to centroid)
+    const patternShapes = groupShapes.map(s => {
+      const verts = s._verts || getVertices(s);
+      return {
+        type: s.type,
+        relX: s.x - cx,
+        relY: s.y - cy,
+        rotation: s.rotation,
+        // Save relative vertices for accurate placement
+        relVerts: verts.map(v => ({ x: v.x - cx, y: v.y - cy })),
+      };
+    });
 
     const newPattern = {
       id: Date.now(),
@@ -773,7 +777,7 @@ export default function App() {
 
     setSavedPatterns(prev => [...prev, newPattern]);
     showToast(`Pattern "${name}" saved!`, 'success');
-  }, [showToast]);
+  }, [showToast, getVertices]);
 
   // Delete a saved pattern
   const deletePattern = useCallback((patternId) => {
@@ -783,42 +787,52 @@ export default function App() {
 
   // Place a pattern on the canvas
   const placePattern = useCallback((pattern, worldX, worldY) => {
-    const newShapes = pattern.shapes.map((ps, i) => ({
-      id: Date.now() + i,
-      type: ps.type,
-      x: worldX + ps.relX,
-      y: worldY + ps.relY,
-      rotation: ps.rotation,
-      building: ps.building || buildingType, // Use saved building type, fallback to current for old patterns
-    }));
+    const newShapes = pattern.shapes.map((ps, i) => {
+      const shape = {
+        id: Date.now() + i,
+        type: ps.type,
+        x: worldX + ps.relX,
+        y: worldY + ps.relY,
+        rotation: ps.rotation,
+        building: buildingType, // Always use current building type
+      };
 
-    // Recalculate vertices for each shape
-    newShapes.forEach(shape => {
-      const rad = (shape.rotation * Math.PI) / 180;
-      const h = SHAPE_SIZE / 2;
-      let localVerts;
-      if (shape.type === 'square' || shape.type === 'stair') {
-        localVerts = [
-          { x: -h, y: -h }, { x: h, y: -h },
-          { x: h, y: h }, { x: -h, y: h },
-        ];
-      } else if (shape.type === 'corner') {
-        localVerts = [
-          { x: -h, y: -h }, { x: h, y: -h }, { x: -h, y: h },
-        ];
+      // Use saved relative vertices if available (new patterns), otherwise recalculate (old patterns)
+      if (ps.relVerts) {
+        shape._verts = ps.relVerts.map(v => ({
+          x: worldX + v.x,
+          y: worldY + v.y,
+        }));
       } else {
-        const apexY = -TRI_HEIGHT * 2 / 3;
-        const baseY = TRI_HEIGHT / 3;
-        localVerts = [
-          { x: 0, y: apexY },
-          { x: h, y: baseY },
-          { x: -h, y: baseY },
-        ];
+        // Fallback for old patterns without saved vertices
+        const rad = (shape.rotation * Math.PI) / 180;
+        const h = SHAPE_SIZE / 2;
+        let localVerts;
+        if (shape.type === 'square' || shape.type === 'stair') {
+          localVerts = [
+            { x: -h, y: -h }, { x: h, y: -h },
+            { x: h, y: h }, { x: -h, y: h },
+          ];
+        } else if (shape.type === 'corner') {
+          localVerts = [
+            { x: -h, y: -h }, { x: h, y: -h }, { x: -h, y: h },
+          ];
+        } else {
+          const apexY = -TRI_HEIGHT * 2 / 3;
+          const baseY = TRI_HEIGHT / 3;
+          localVerts = [
+            { x: 0, y: apexY },
+            { x: h, y: baseY },
+            { x: -h, y: baseY },
+          ];
+        }
+        shape._verts = localVerts.map(v => ({
+          x: shape.x + v.x * Math.cos(rad) - v.y * Math.sin(rad),
+          y: shape.y + v.x * Math.sin(rad) + v.y * Math.cos(rad),
+        }));
       }
-      shape._verts = localVerts.map(v => ({
-        x: shape.x + v.x * Math.cos(rad) - v.y * Math.sin(rad),
-        y: shape.y + v.x * Math.sin(rad) + v.y * Math.cos(rad),
-      }));
+
+      return shape;
     });
 
     setShapes(prev => [...prev, ...newShapes]);
