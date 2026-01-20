@@ -468,15 +468,6 @@ export default function App() {
   const [isDraggingPlacedItem, setIsDraggingPlacedItem] = useState(false);
   const [itemDragOffset, setItemDragOffset] = useState({ x: 0, y: 0 });
 
-  // Category expansion state for sidebar (collapsed by default)
-  const [expandedCategories, setExpandedCategories] = useState({
-    generator: false,
-    refiner: false,
-    utilities: false,
-    fabricator: false,
-    storage: false,
-  });
-
   // Toast notification system
   const [toasts, setToasts] = useState([]);
   const showToast = useCallback((message, type = 'info', duration = 3000) => {
@@ -490,9 +481,20 @@ export default function App() {
   // Help modal state
   const [showHelpModal, setShowHelpModal] = useState(false);
 
+  // Saved patterns state
+  const [savedPatterns, setSavedPatterns] = useState(() => {
+    try {
+      const stored = localStorage.getItem('dune-planner-patterns');
+      return stored ? JSON.parse(stored) : [];
+    } catch { return []; }
+  });
+  const [showPatternNameModal, setShowPatternNameModal] = useState(false);
+  const [pendingPatternShapes, setPendingPatternShapes] = useState(null);
+  const [patternName, setPatternName] = useState('');
+  const [draggingPattern, setDraggingPattern] = useState(null);
+
   // Auto-save and restore state
   const [showRestorePrompt, setShowRestorePrompt] = useState(false);
-  const [savedStateAvailable, setSavedStateAvailable] = useState(false);
   const [skipNextSave, setSkipNextSave] = useState(false);
 
   // =====================================================
@@ -675,7 +677,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedItemId, currentFloor, isLocked, shapes, clipboard, setShapes, showHelpModal]);
+  }, [selectedItemId, currentFloor, isLocked, shapes, clipboard, setShapes, setPlacedItems, showHelpModal]);
 
   // =====================================================
   // AUTO-SAVE & RESTORE
@@ -739,6 +741,90 @@ export default function App() {
     return () => clearTimeout(timeout);
   }, [allFloorShapes, allFloorItems, saveToLocalStorage]);
 
+  // Save patterns to localStorage whenever they change
+  useEffect(() => {
+    try {
+      localStorage.setItem('dune-planner-patterns', JSON.stringify(savedPatterns));
+    } catch (e) {
+      console.warn('Failed to save patterns:', e);
+    }
+  }, [savedPatterns]);
+
+  // Save a pattern from a group of shapes
+  const savePattern = useCallback((name, groupShapes) => {
+    // Calculate centroid of the group
+    const cx = groupShapes.reduce((sum, s) => sum + s.x, 0) / groupShapes.length;
+    const cy = groupShapes.reduce((sum, s) => sum + s.y, 0) / groupShapes.length;
+
+    // Store shapes with relative positions (normalized to centroid)
+    const patternShapes = groupShapes.map(s => ({
+      type: s.type,
+      building: s.building || 'atreides',
+      relX: s.x - cx,
+      relY: s.y - cy,
+      rotation: s.rotation,
+    }));
+
+    const newPattern = {
+      id: Date.now(),
+      name,
+      shapes: patternShapes,
+    };
+
+    setSavedPatterns(prev => [...prev, newPattern]);
+    showToast(`Pattern "${name}" saved!`, 'success');
+  }, [showToast]);
+
+  // Delete a saved pattern
+  const deletePattern = useCallback((patternId) => {
+    setSavedPatterns(prev => prev.filter(p => p.id !== patternId));
+    showToast('Pattern deleted', 'info');
+  }, [showToast]);
+
+  // Place a pattern on the canvas
+  const placePattern = useCallback((pattern, worldX, worldY) => {
+    const newShapes = pattern.shapes.map((ps, i) => ({
+      id: Date.now() + i,
+      type: ps.type,
+      x: worldX + ps.relX,
+      y: worldY + ps.relY,
+      rotation: ps.rotation,
+      building: ps.building || buildingType, // Use saved building type, fallback to current for old patterns
+    }));
+
+    // Recalculate vertices for each shape
+    newShapes.forEach(shape => {
+      const rad = (shape.rotation * Math.PI) / 180;
+      const h = SHAPE_SIZE / 2;
+      let localVerts;
+      if (shape.type === 'square' || shape.type === 'stair') {
+        localVerts = [
+          { x: -h, y: -h }, { x: h, y: -h },
+          { x: h, y: h }, { x: -h, y: h },
+        ];
+      } else if (shape.type === 'corner') {
+        localVerts = [
+          { x: -h, y: -h }, { x: h, y: -h }, { x: -h, y: h },
+        ];
+      } else {
+        const apexY = -TRI_HEIGHT * 2 / 3;
+        const baseY = TRI_HEIGHT / 3;
+        localVerts = [
+          { x: 0, y: apexY },
+          { x: h, y: baseY },
+          { x: -h, y: baseY },
+        ];
+      }
+      shape._verts = localVerts.map(v => ({
+        x: shape.x + v.x * Math.cos(rad) - v.y * Math.sin(rad),
+        y: shape.y + v.x * Math.sin(rad) + v.y * Math.cos(rad),
+      }));
+    });
+
+    setShapes(prev => [...prev, ...newShapes]);
+    showToast(`Placed "${pattern.name}"`, 'success');
+  }, [buildingType, showToast, setShapes]);
+
   // Check for saved state on mount
   useEffect(() => {
     // Don't show restore prompt if loading from URL
@@ -752,7 +838,6 @@ export default function App() {
         const hasContent = Object.values(state.allFloorShapes || {}).some(s => s.length > 0) ||
                           Object.values(state.allFloorItems || {}).some(i => i.length > 0);
         if (hasContent) {
-          setSavedStateAvailable(true);
           setShowRestorePrompt(true);
         }
       }
@@ -2443,8 +2528,8 @@ export default function App() {
       return;
     }
 
-    // Lock mode - handle group dragging and rotation
-    if (isLocked && e.button === 0) {
+    // Lock mode - handle group dragging, rotation, and right-click for pattern save
+    if (isLocked && (e.button === 0 || e.button === 2)) {
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
       const screenX = e.clientX - rect.left;
@@ -2456,6 +2541,14 @@ export default function App() {
 
       const groupIds = findConnectedGroup(shape);
       const groupShapes = getShapesByIds(groupIds);
+
+      // Right-click in lock mode - save pattern
+      if (e.button === 2) {
+        setPendingPatternShapes(groupShapes);
+        setPatternName('');
+        setShowPatternNameModal(true);
+        return;
+      }
 
       // Store original positions for potential reset
       const originals = groupShapes.map(s => ({
@@ -3572,6 +3665,18 @@ export default function App() {
     setDraggingItem(null);
   }, [draggingItem, pan, zoom, fiefMode, isItemInBuildableArea, doesItemOverlap]);
 
+  // Handle pattern drop from saved patterns panel
+  const handlePatternDrop = useCallback((e) => {
+    if (!draggingPattern) return;
+
+    const svgRect = e.currentTarget.getBoundingClientRect();
+    const worldX = (e.clientX - svgRect.left - pan.x) / zoom;
+    const worldY = (e.clientY - svgRect.top - pan.y) / zoom;
+
+    placePattern(draggingPattern, worldX, worldY);
+    setDraggingPattern(null);
+  }, [draggingPattern, pan, zoom, placePattern]);
+
   // Handle item deletion
   const handleItemDelete = useCallback((itemId) => {
     setPlacedItems(prev => prev.filter(item => item.id !== itemId));
@@ -3599,42 +3704,6 @@ export default function App() {
     });
     setIsDraggingPlacedItem(true);
   }, [itemMode, pan, zoom]);
-
-  // Handle placed item mouse move (for dragging)
-  const handlePlacedItemMouseMove = useCallback((e) => {
-    if (!isDraggingPlacedItem || selectedItemId === null) return;
-
-    const svgRect = e.currentTarget.getBoundingClientRect();
-    const mouseX = (e.clientX - svgRect.left - pan.x) / zoom;
-    const mouseY = (e.clientY - svgRect.top - pan.y) / zoom;
-
-    const newX = mouseX - itemDragOffset.x;
-    const newY = mouseY - itemDragOffset.y;
-
-    // Check fief boundary if enabled
-    const item = placedItems.find(i => i.id === selectedItemId);
-    if (item) {
-      const itemDef = BASE_ITEMS[item.itemType];
-      if (fiefMode && itemDef && !isItemInBuildableArea(newX, newY, itemDef)) {
-        return; // Don't allow moving outside fief
-      }
-      // Check for overlap with other items (exclude the item being dragged)
-      if (itemDef && doesItemOverlap(newX, newY, itemDef, selectedItemId)) {
-        return; // Don't allow moving on top of another item
-      }
-    }
-
-    setPlacedItems(prev => prev.map(item =>
-      item.id === selectedItemId
-        ? { ...item, x: newX, y: newY }
-        : item
-    ));
-  }, [isDraggingPlacedItem, selectedItemId, pan, zoom, itemDragOffset, placedItems, fiefMode, isItemInBuildableArea, doesItemOverlap]);
-
-  // Handle placed item mouse up (end dragging)
-  const handlePlacedItemMouseUp = useCallback(() => {
-    setIsDraggingPlacedItem(false);
-  }, []);
 
   // Render placed items on canvas
   const renderPlacedItems = () => {
@@ -3704,166 +3773,6 @@ export default function App() {
     });
   };
 
-  // Render item sidebar
-  const renderItemSidebar = () => {
-    return (
-        <div className={`bg-slate-800 rounded-xl border-2 border-slate-700 transition-all duration-300 flex-shrink-0 ${itemSidebarOpen ? 'w-48 p-4' : 'w-10 p-1'}`}>
-          {/* Toggle button (collapsed) / Header (expanded) */}
-          {itemSidebarOpen ? (
-            <div className="text-amber-400 font-bold text-center text-lg mb-3">Item Mode</div>
-          ) : (
-            <button
-              onClick={() => setItemSidebarOpen(true)}
-              className="w-full flex items-center justify-center text-amber-400 hover:text-amber-300 py-2 transition-colors"
-              title="Open item panel"
-            >
-              <span className="font-bold text-sm">&lt;&lt;</span>
-            </button>
-          )}
-
-        {itemSidebarOpen && (
-          <>
-            <div className="text-slate-300 font-medium text-sm mb-3">Base Items</div>
-
-            {/* Item palette by category */}
-            <div className="mb-4 max-h-64 overflow-y-auto custom-scrollbar">
-              {Object.entries(ITEM_CATEGORIES).map(([categoryKey, category]) => {
-                const categoryItems = Object.values(BASE_ITEMS).filter(item => item.category === categoryKey);
-                if (categoryItems.length === 0) return null;
-
-                const isExpanded = expandedCategories[categoryKey];
-
-                return (
-                  <div key={categoryKey} className="mb-2">
-                    {/* Category header */}
-                    <button
-                      onClick={() => setExpandedCategories(prev => ({
-                        ...prev,
-                        [categoryKey]: !prev[categoryKey]
-                      }))}
-                      className="w-full flex items-center justify-between px-2 py-1 rounded hover:bg-slate-700 transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="w-3 h-3 rounded-sm"
-                          style={{ backgroundColor: category.color }}
-                        />
-                        <span className="text-xs font-medium text-slate-300">{category.label}</span>
-                        <span className="text-xs text-slate-500">({categoryItems.length})</span>
-                      </div>
-                      <svg
-                        className={`w-4 h-4 text-slate-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-
-                    {/* Category items */}
-                    {isExpanded && (
-                      <div className="grid grid-cols-2 gap-1 mt-1 pl-2">
-                        {categoryItems.map(item => (
-                          <div
-                            key={item.id}
-                            draggable
-                            onDragStart={(e) => handleItemDragStart(item.id, e)}
-                            className="bg-slate-700 rounded-lg p-1.5 cursor-grab active:cursor-grabbing hover:bg-slate-600 transition-colors"
-                            title={item.name}
-                          >
-                            <img
-                              src={item.icon}
-                              alt={item.name}
-                              className="w-full aspect-square object-contain rounded"
-                              draggable={false}
-                            />
-                            <div className="text-xs text-slate-300 text-center mt-1 truncate">{item.name}</div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* Resource totals */}
-            <div className="border-t border-slate-600 pt-3">
-              <div className="text-slate-300 font-medium text-sm mb-2">Resources</div>
-
-              {/* Power */}
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-yellow-400">⚡ Power</span>
-                <span className={netPower < 0 ? 'text-red-400 font-bold' : 'text-green-400'}>
-                  {netPower >= 0 ? '+' : ''}{netPower}
-                </span>
-              </div>
-              <div className="text-xs text-slate-500 mb-2 pl-4">
-                +{resourceTotals.powerGenerated} / -{resourceTotals.powerConsumed}
-              </div>
-
-              {/* Power warning */}
-              {netPower < 0 && (
-                <div className="bg-red-900/50 border border-red-500 rounded px-2 py-1 mb-2">
-                  <span className="text-red-400 text-xs">⚠ Insufficient power!</span>
-                </div>
-              )}
-
-              {/* Water production */}
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-blue-400">💧 Water/hr</span>
-                <span className="text-blue-300">{waterPerHour.toFixed(1)} ml</span>
-              </div>
-
-              {/* Water storage */}
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-cyan-400">🪣 Storage</span>
-                <span className="text-cyan-300">{resourceTotals.waterStorage} ml</span>
-              </div>
-            </div>
-
-            {/* Item count */}
-            <div className="border-t border-slate-600 pt-3 mt-3">
-              <div className="text-xs text-slate-500">
-                Items placed: {placedItems.length}
-              </div>
-            </div>
-
-            {/* Material totals */}
-            {materialTotals.length > 0 && (
-              <div className="border-t border-slate-600 pt-3 mt-3">
-                <div className="text-slate-300 font-medium text-sm mb-2">Total Materials</div>
-                <div className="max-h-40 overflow-y-auto custom-scrollbar">
-                  {materialTotals.map(([name, amount]) => (
-                    <div key={name} className="flex items-center justify-between text-xs mb-1">
-                      <span className="text-slate-400 truncate mr-2">{name}</span>
-                      <span className="text-amber-300 font-medium">{amount.toLocaleString()}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Clear Items button - only shown when items are placed */}
-            {placedItems.length > 0 && (
-              <button
-                onClick={() => setPlacedItems([])}
-                className="w-full bg-red-600/80 hover:bg-red-500 text-white text-sm py-1.5 rounded-lg transition-colors flex items-center justify-center gap-2 mt-3"
-                title="Clear all items on this floor"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
-                Clear Items
-              </button>
-            )}
-          </>
-        )}
-        </div>
-    );
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-950 p-4 flex flex-col items-center">
       <div className="mb-4 text-center">
@@ -3874,8 +3783,8 @@ export default function App() {
       </div>
 
       {/* Controls row: mouse assignments, clear, reset view, zoom */}
-      {/* ml-[144px] offsets for left sidebar to center over canvas */}
-      <div className="flex flex-wrap items-center justify-center gap-2 mb-3 ml-[144px]">
+      {/* ml-[96px] offsets to align with canvas (sidebar 192px + gap 16px = 208px, centered adjustment) */}
+      <div className="flex flex-wrap items-center justify-center gap-2 mb-3 ml-[96px]" style={{ width: '900px' }}>
         {/* Unified controls panel */}
         <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-3">
           {/* Mouse button assignments */}
@@ -3937,9 +3846,9 @@ export default function App() {
           )}
 
           {/* Action buttons */}
-          <button onClick={handleClear} disabled={shapes.length === 0}
+          <button onClick={handleClear} disabled={shapes.length === 0 && placedItems.length === 0 && !fiefMode}
             className="bg-red-600/80 hover:bg-red-500 disabled:opacity-40 text-white w-8 h-8 rounded text-sm transition-colors flex items-center justify-center"
-            title="Clear all shapes"
+            title="Clear all shapes, items, and fief"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -4062,9 +3971,9 @@ export default function App() {
       </div>
 
       {/* Main content area */}
-      <div className="flex gap-4">
+      <div className="flex">
         {/* Left Sidebar - Building Type & Fief Controls */}
-        <div className="bg-slate-800 rounded-xl border-2 border-slate-700 w-48 p-4 flex-shrink-0">
+        <div className="bg-slate-800 rounded-l-xl border-2 border-r-0 border-slate-700 w-48 p-4 flex-shrink-0">
           {/* Building Type */}
           <div className="text-slate-300 font-bold text-center text-lg mb-3">Building Type</div>
           <div className="flex flex-col gap-1 mb-3">
@@ -4172,6 +4081,20 @@ export default function App() {
                 />
               </div>
 
+              <div className="flex flex-col gap-1 mt-2">
+                <label className="text-slate-400 text-xs">Build Padding ({fiefPadding}%)</label>
+                <input
+                  type="range"
+                  value={fiefPadding}
+                  onChange={(e) => setFiefPadding(parseFloat(e.target.value))}
+                  min="0"
+                  max="10"
+                  step="0.5"
+                  className="w-full accent-amber-500"
+                />
+                <p className="text-slate-500 text-[10px]">Expands buildable area beyond fief boundary</p>
+              </div>
+
               {/* Stakes Section */}
               <div className="border-t border-slate-600 pt-2 mt-3">
                 <div className="text-slate-300 font-medium text-sm mb-2">Stakes ({stakesInventory}/{MAX_STAKES})</div>
@@ -4229,7 +4152,7 @@ export default function App() {
         </div>
 
         {/* Canvas */}
-        <div className="bg-slate-800 rounded-xl shadow-2xl overflow-hidden border-2 border-slate-700">
+        <div className={`bg-slate-800 shadow-2xl overflow-hidden border-y-2 border-slate-700 ${itemSidebarOpen ? '' : 'border-r-2 rounded-r-xl'}`}>
         <svg
           width="900" height="600"
           onContextMenu={(e) => e.preventDefault()}
@@ -4239,7 +4162,7 @@ export default function App() {
           onMouseLeave={() => { setHoverInfo(null); setIsPanning(false); setIsRotating(false); setBaseVertices(null); setRotationAngle(0); }}
           onWheel={handleWheel}
           onDragOver={(e) => { e.preventDefault(); handleItemDragOver(e); }}
-          onDrop={(e) => { handleItemDrop(e); handleFiefDrop(e); }}
+          onDrop={(e) => { handleItemDrop(e); handleFiefDrop(e); handlePatternDrop(e); }}
           className={isPanning ? "cursor-grabbing" : "cursor-crosshair"}
         >
           <defs>
@@ -4273,13 +4196,114 @@ export default function App() {
         </svg>
         </div>
 
-        {/* Right Sidebar - Items & Resources */}
-        {renderItemSidebar()}
+        {/* Right Sidebar - Items Panel (shows/hides on button click) */}
+        {itemSidebarOpen && (
+          <div className="bg-slate-800 rounded-r-xl border-2 border-l-0 border-slate-700 w-48 p-4 flex-shrink-0">
+            <div className="text-amber-400 font-bold text-center text-lg mb-3">Item Mode</div>
+            <div className="text-slate-300 font-medium text-sm mb-3">Base Items</div>
+
+            {/* Item palette by category */}
+            <div className="mb-4 max-h-64 overflow-y-auto custom-scrollbar">
+              {Object.entries(ITEM_CATEGORIES).map(([categoryKey, category]) => {
+                const categoryItems = Object.values(BASE_ITEMS).filter(item => item.category === categoryKey);
+                if (categoryItems.length === 0) return null;
+
+                return (
+                  <div key={categoryKey} className="mb-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <div className="w-3 h-3 rounded-sm" style={{ backgroundColor: category.color }} />
+                      <span className="text-xs font-medium text-slate-300">{category.label}</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1 pl-2">
+                      {categoryItems.map(item => (
+                        <div
+                          key={item.id}
+                          draggable
+                          onDragStart={(e) => handleItemDragStart(item.id, e)}
+                          className="bg-slate-700 rounded-lg p-1.5 cursor-grab active:cursor-grabbing hover:bg-slate-600 transition-colors"
+                          title={item.name}
+                        >
+                          <img
+                            src={item.icon}
+                            alt={item.name}
+                            className="w-full aspect-square object-contain rounded"
+                            draggable={false}
+                          />
+                          <div className="text-[9px] text-slate-300 text-center mt-1 truncate">{item.name}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Resource totals */}
+            <div className="border-t border-slate-600 pt-3">
+              <div className="text-slate-300 font-medium text-sm mb-2">Resources</div>
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-yellow-400">⚡ Power</span>
+                <span className={netPower < 0 ? 'text-red-400 font-bold' : 'text-green-400'}>
+                  {netPower >= 0 ? '+' : ''}{netPower}
+                </span>
+              </div>
+              <div className="text-xs text-slate-500 mb-2 pl-4">
+                +{resourceTotals.powerGenerated} / -{resourceTotals.powerConsumed}
+              </div>
+              {netPower < 0 && (
+                <div className="bg-red-900/50 border border-red-500 rounded px-2 py-1 mb-2">
+                  <span className="text-red-400 text-xs">⚠ Insufficient power!</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-blue-400">💧 Water/hr</span>
+                <span className="text-blue-300">{waterPerHour.toFixed(1)} ml</span>
+              </div>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-cyan-400">🪣 Storage</span>
+                <span className="text-cyan-300">{resourceTotals.waterStorage} ml</span>
+              </div>
+            </div>
+
+            {/* Item count */}
+            <div className="border-t border-slate-600 pt-3 mt-3">
+              <div className="text-xs text-slate-500">Items on floor {currentFloor + 1}: {placedItems.length}</div>
+            </div>
+
+            {/* Material totals */}
+            {materialTotals.length > 0 && (
+              <div className="border-t border-slate-600 pt-3 mt-3">
+                <div className="text-slate-300 font-medium text-sm mb-2">Total Materials</div>
+                <div className="max-h-40 overflow-y-auto custom-scrollbar">
+                  {materialTotals.map(([name, amount]) => (
+                    <div key={name} className="flex items-center justify-between text-xs mb-1">
+                      <span className="text-slate-400 truncate mr-2">{name}</span>
+                      <span className="text-amber-300 font-medium">{amount.toLocaleString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Clear Items button */}
+            {placedItems.length > 0 && (
+              <button
+                onClick={() => setPlacedItems([])}
+                className="w-full bg-red-600/80 hover:bg-red-500 text-white text-sm py-1.5 rounded-lg transition-colors flex items-center justify-center gap-2 mt-3"
+                title="Clear all items on this floor"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+                Clear Items
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
-      {/* Instructions bar with Share/Discord on right */}
-      {/* ml-[144px] offsets for left sidebar to center over canvas */}
-      <div className="flex items-center justify-between mt-3 bg-slate-800/50 px-4 py-2 rounded-lg ml-[144px]" style={{ width: '900px' }}>
+      {/* Instructions bar with stats and Share/Discord */}
+      <div className="flex items-center justify-between mt-3 bg-slate-800/50 px-4 py-2 rounded-lg ml-[96px]" style={{ width: '900px' }}>
         <div className="flex items-center gap-3">
           {/* Help button */}
           <button
@@ -4297,28 +4321,41 @@ export default function App() {
               <span className="text-blue-400 font-medium">Item Mode:</span>
               <span className="text-slate-400 ml-2">Click</span> Select ·
               <span className="text-slate-400 ml-2">Drag</span> Move ·
-              <span className="text-slate-400 ml-2">Right-click/Del</span> Delete ·
-              <span className="text-slate-400 ml-2">Esc</span> Deselect
+              <span className="text-slate-400 ml-2">Right-click/Del</span> Delete
             </p>
           ) : isLocked ? (
             <p className="text-slate-400 text-sm">
               <span className="text-amber-400 font-medium">Lock Mode:</span>
               <span className="text-slate-400 ml-2">Drag</span> Move ·
               <span className="text-slate-400 ml-2">Shift+Drag</span> Rotate ·
-              <span className="text-slate-400 ml-2">Ctrl+C</span> Copy ·
-              <span className="text-slate-400 ml-2">Ctrl+V</span> Paste ·
-              <span className="text-slate-400 ml-2">Scroll</span> Zoom
+              <span className="text-slate-400 ml-2">Ctrl+C/V</span> Copy/Paste
             </p>
           ) : (
             <p className="text-slate-400 text-sm">
               <span className="text-slate-400">Hold + Drag</span> Rotate ·
               <span className="text-slate-400 ml-2">Scroll</span> Zoom ·
-              <span className="text-slate-400 ml-2">Middle Drag</span> Pan ·
               <span className="text-slate-400 ml-2">Ctrl+Z</span> Undo
             </p>
           )}
         </div>
         <div className="flex items-center gap-2">
+          {/* Pieces and Cost */}
+          <div className="bg-slate-800 px-3 py-1 rounded text-xs flex items-center gap-2">
+            <span className="text-blue-400 font-medium">{squareCount}</span><span className="text-slate-500">□</span>
+            <span className="text-orange-400 font-medium">{triangleCount}</span><span className="text-slate-500">△</span>
+            <span className="text-green-400 font-medium">{cornerCount}</span><span className="text-slate-500">◗</span>
+            <span className="text-purple-400 font-medium">{stairCount}</span><span className="text-slate-500">≡</span>
+            <span className="text-slate-600">|</span>
+            <span className="text-slate-400">Cost:</span>
+            {plastoneCost > 0 && (
+              <><span className="text-amber-400 font-bold">{plastoneCost.toLocaleString()}</span><span className="text-slate-500">p</span></>
+            )}
+            {plastoneCost > 0 && graniteCost > 0 && <span className="text-slate-600">+</span>}
+            {graniteCost > 0 && (
+              <><span className="text-amber-400 font-bold">{graniteCost.toLocaleString()}</span><span className="text-slate-500">g</span></>
+            )}
+            {plastoneCost === 0 && graniteCost === 0 && <span className="text-slate-500">0</span>}
+          </div>
           <button onClick={handleCopyLink}
             className={`${linkCopied ? 'bg-green-600' : 'bg-amber-600 hover:bg-amber-500'} text-white px-3 py-1.5 rounded-lg text-sm transition-colors flex items-center gap-1`}>
             {linkCopied ? (
@@ -4389,39 +4426,137 @@ export default function App() {
         </div>
       )}
 
-      {/* Stats row below canvas */}
-      {/* ml-[144px] offsets for left sidebar to center over canvas */}
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-4 ml-[144px]">
-        <div className="bg-slate-800 px-4 py-2 rounded-lg text-sm flex items-center gap-3">
-          <span className="text-slate-400">Pieces:</span>
-          <span className="text-blue-400 font-medium">{squareCount}</span><span className="text-slate-500">□</span>
-          <span className="text-orange-400 font-medium">{triangleCount}</span><span className="text-slate-500">△</span>
-          <span className="text-green-400 font-medium">{cornerCount}</span><span className="text-slate-500">◗</span>
-          <span className="text-purple-400 font-medium">{stairCount}</span><span className="text-slate-500">≡</span>
-          <span className="text-slate-400 ml-2">Total:</span>
-          <span className="text-white font-medium">{shapes.length}</span>
-        </div>
+      {/* Saved Patterns Panel - visible only in lock mode */}
+      {isLocked && (
+        <div className="mt-3 ml-[96px]" style={{ width: '900px' }}>
+          <div className="bg-slate-800 rounded-lg border-2 border-slate-700 p-3">
+            <div className="flex items-center justify-between mb-2">
+              <h3 className="text-slate-300 font-medium text-sm">Saved Patterns</h3>
+              <span className="text-slate-500 text-xs">Right-click a group to save · Drag to place</span>
+            </div>
+            {savedPatterns.length === 0 ? (
+              <div className="text-slate-500 text-sm py-4 text-center">
+                No patterns saved. Right-click on a connected group to save it as a pattern.
+              </div>
+            ) : (
+              <div className="flex gap-3 overflow-x-auto custom-scrollbar pb-2">
+                {savedPatterns.map(pattern => {
+                  // Calculate bounds of pattern shapes for thumbnail sizing
+                  const minX = Math.min(...pattern.shapes.map(s => s.relX)) - SHAPE_SIZE/2;
+                  const maxX = Math.max(...pattern.shapes.map(s => s.relX)) + SHAPE_SIZE/2;
+                  const minY = Math.min(...pattern.shapes.map(s => s.relY)) - SHAPE_SIZE/2;
+                  const maxY = Math.max(...pattern.shapes.map(s => s.relY)) + SHAPE_SIZE/2;
+                  const width = maxX - minX;
+                  const height = maxY - minY;
+                  const scale = Math.min(60 / width, 60 / height, 1);
+                  const offsetX = (70 - width * scale) / 2 - minX * scale;
+                  const offsetY = (70 - height * scale) / 2 - minY * scale;
 
-        <div className="bg-slate-800 px-4 py-2 rounded-lg text-sm flex items-center gap-2">
-          <span className="text-slate-400">Cost:</span>
-          {plastoneCost > 0 && (
-            <>
-              <span className="text-amber-400 font-bold">{plastoneCost.toLocaleString()}</span>
-              <span className="text-slate-500">plastone</span>
-            </>
-          )}
-          {plastoneCost > 0 && graniteCost > 0 && <span className="text-slate-600">+</span>}
-          {graniteCost > 0 && (
-            <>
-              <span className="text-amber-400 font-bold">{graniteCost.toLocaleString()}</span>
-              <span className="text-slate-500">granite</span>
-            </>
-          )}
-          {plastoneCost === 0 && graniteCost === 0 && (
-            <span className="text-slate-500">0</span>
-          )}
+                  return (
+                    <div
+                      key={pattern.id}
+                      className="relative flex-shrink-0 cursor-grab active:cursor-grabbing group"
+                      draggable
+                      onDragStart={(e) => {
+                        setDraggingPattern(pattern);
+                        e.dataTransfer.effectAllowed = 'copy';
+                      }}
+                      onDragEnd={() => setDraggingPattern(null)}
+                    >
+                      <div className="w-[80px] h-[90px] bg-slate-700 rounded-lg border border-slate-600 hover:border-amber-500 transition-colors p-1 flex flex-col">
+                        <svg width="70" height="70" className="flex-shrink-0">
+                          <g transform={`translate(${offsetX}, ${offsetY}) scale(${scale})`}>
+                            {pattern.shapes.map((ps, i) => {
+                              const h = SHAPE_SIZE / 2;
+                              const rad = (ps.rotation * Math.PI) / 180;
+                              const cos = Math.cos(rad);
+                              const sin = Math.sin(rad);
+                              // Use saved building type colors, fallback to current buildingType for old patterns
+                              const shapeBuilding = ps.building || buildingType;
+                              const colors = COLOR_SCHEMES[shapeBuilding] || COLOR_SCHEMES.atreides;
+                              const shapeColors = colors[ps.type] || colors.square;
+
+                              if (ps.type === 'square' || ps.type === 'stair') {
+                                const corners = [
+                                  { x: -h, y: -h }, { x: h, y: -h },
+                                  { x: h, y: h }, { x: -h, y: h },
+                                ].map(c => ({
+                                  x: ps.relX + c.x * cos - c.y * sin,
+                                  y: ps.relY + c.x * sin + c.y * cos,
+                                }));
+                                return (
+                                  <polygon
+                                    key={i}
+                                    points={corners.map(c => `${c.x},${c.y}`).join(' ')}
+                                    fill={shapeColors.fill}
+                                    stroke={shapeColors.stroke}
+                                    strokeWidth="2"
+                                  />
+                                );
+                              } else if (ps.type === 'corner') {
+                                const corners = [
+                                  { x: -h, y: -h }, { x: h, y: -h }, { x: -h, y: h },
+                                ].map(c => ({
+                                  x: ps.relX + c.x * cos - c.y * sin,
+                                  y: ps.relY + c.x * sin + c.y * cos,
+                                }));
+                                return (
+                                  <polygon
+                                    key={i}
+                                    points={corners.map(c => `${c.x},${c.y}`).join(' ')}
+                                    fill={shapeColors.fill}
+                                    stroke={shapeColors.stroke}
+                                    strokeWidth="2"
+                                  />
+                                );
+                              } else {
+                                // Triangle
+                                const apexY = -TRI_HEIGHT * 2 / 3;
+                                const baseY = TRI_HEIGHT / 3;
+                                const corners = [
+                                  { x: 0, y: apexY },
+                                  { x: h, y: baseY },
+                                  { x: -h, y: baseY },
+                                ].map(c => ({
+                                  x: ps.relX + c.x * cos - c.y * sin,
+                                  y: ps.relY + c.x * sin + c.y * cos,
+                                }));
+                                return (
+                                  <polygon
+                                    key={i}
+                                    points={corners.map(c => `${c.x},${c.y}`).join(' ')}
+                                    fill={shapeColors.fill}
+                                    stroke={shapeColors.stroke}
+                                    strokeWidth="2"
+                                  />
+                                );
+                              }
+                            })}
+                          </g>
+                        </svg>
+                        <div className="text-[10px] text-slate-400 text-center truncate px-1" title={pattern.name}>
+                          {pattern.name}
+                        </div>
+                      </div>
+                      {/* Delete button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deletePattern(pattern.id);
+                        }}
+                        className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 hover:bg-red-500 text-white rounded-full text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                        title="Delete pattern"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Toast Notifications */}
       <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
@@ -4564,6 +4699,10 @@ export default function App() {
                     <span className="text-slate-300">Paste Group</span>
                     <kbd className="bg-slate-600 px-2 py-0.5 rounded text-xs text-white">Ctrl+V</kbd>
                   </div>
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Save Pattern</span>
+                    <span className="text-slate-400 text-xs">Right Click</span>
+                  </div>
                 </div>
               </div>
 
@@ -4601,6 +4740,61 @@ export default function App() {
                   <li>• Use multiple floors for multi-story buildings</li>
                 </ul>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pattern Name Modal */}
+      {showPatternNameModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowPatternNameModal(false)}>
+          <div className="bg-slate-800 rounded-xl p-6 shadow-2xl border-2 border-slate-700 w-80" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-white mb-4">Save Pattern</h3>
+            <input
+              type="text"
+              value={patternName}
+              onChange={(e) => setPatternName(e.target.value)}
+              placeholder="Enter pattern name..."
+              className="w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-400 focus:outline-none focus:border-amber-500 mb-4"
+              autoFocus
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && patternName.trim() && pendingPatternShapes) {
+                  savePattern(patternName.trim(), pendingPatternShapes);
+                  setShowPatternNameModal(false);
+                  setPendingPatternShapes(null);
+                  setPatternName('');
+                } else if (e.key === 'Escape') {
+                  setShowPatternNameModal(false);
+                  setPendingPatternShapes(null);
+                  setPatternName('');
+                }
+              }}
+            />
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setShowPatternNameModal(false);
+                  setPendingPatternShapes(null);
+                  setPatternName('');
+                }}
+                className="flex-1 px-4 py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-500 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (patternName.trim() && pendingPatternShapes) {
+                    savePattern(patternName.trim(), pendingPatternShapes);
+                    setShowPatternNameModal(false);
+                    setPendingPatternShapes(null);
+                    setPatternName('');
+                  }
+                }}
+                disabled={!patternName.trim()}
+                className="flex-1 px-4 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save
+              </button>
             </div>
           </div>
         </div>
