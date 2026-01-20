@@ -3707,19 +3707,20 @@ export default function App() {
   // Render item sidebar
   const renderItemSidebar = () => {
     return (
-      <div className={`bg-slate-800 rounded-xl border-2 border-slate-700 transition-all duration-300 flex-shrink-0 w-48 ${itemSidebarOpen ? 'p-4' : 'p-1'}`}>
-        {/* Toggle button (collapsed) / Header (expanded) */}
-        {itemSidebarOpen ? (
-          <div className="text-amber-400 font-bold text-center text-lg mb-3">Item Mode</div>
-        ) : (
-          <button
-            onClick={() => setItemSidebarOpen(true)}
-            className="w-full flex items-center justify-center text-amber-400 hover:text-amber-300 py-2 transition-colors"
-            title="Open item panel"
-          >
-            <span className="font-bold text-sm">&lt;&lt;</span>
-          </button>
-        )}
+      <div className="w-48 flex-shrink-0 flex justify-end">
+        <div className={`bg-slate-800 rounded-xl border-2 border-slate-700 transition-all duration-300 ${itemSidebarOpen ? 'w-48 p-4' : 'w-10 p-1'}`}>
+          {/* Toggle button (collapsed) / Header (expanded) */}
+          {itemSidebarOpen ? (
+            <div className="text-amber-400 font-bold text-center text-lg mb-3">Item Mode</div>
+          ) : (
+            <button
+              onClick={() => setItemSidebarOpen(true)}
+              className="w-full flex items-center justify-center text-amber-400 hover:text-amber-300 py-2 transition-colors"
+              title="Open item panel"
+            >
+              <span className="font-bold text-sm">&lt;&lt;</span>
+            </button>
+          )}
 
         {itemSidebarOpen && (
           <>
@@ -3860,6 +3861,7 @@ export default function App() {
             )}
           </>
         )}
+        </div>
       </div>
     );
   };
