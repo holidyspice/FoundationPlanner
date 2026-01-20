@@ -752,17 +752,24 @@ export default function App() {
 
   // Save a pattern from a group of shapes
   const savePattern = useCallback((name, groupShapes) => {
-    // Calculate centroid of the group
-    const cx = groupShapes.reduce((sum, s) => sum + s.x, 0) / groupShapes.length;
-    const cy = groupShapes.reduce((sum, s) => sum + s.y, 0) / groupShapes.length;
+    // Calculate centroid of the group (average of all shape centers)
+    const patternCx = groupShapes.reduce((sum, s) => sum + s.x, 0) / groupShapes.length;
+    const patternCy = groupShapes.reduce((sum, s) => sum + s.y, 0) / groupShapes.length;
 
-    // Store shapes with relative positions (normalized to centroid)
-    const patternShapes = groupShapes.map(s => ({
-      type: s.type,
-      relX: s.x - cx,
-      relY: s.y - cy,
-      rotation: s.rotation,
-    }));
+    // Store shapes with relative positions and local vertices (relative to each shape's own center)
+    const patternShapes = groupShapes.map(s => {
+      const verts = s._verts || getVertices(s);
+      // Store vertices relative to the shape's own center
+      const localVerts = verts.map(v => ({ x: v.x - s.x, y: v.y - s.y }));
+
+      return {
+        type: s.type,
+        relX: s.x - patternCx,
+        relY: s.y - patternCy,
+        rotation: s.rotation,
+        localVerts, // Vertices relative to shape center - preserves actual geometry
+      };
+    });
 
     const newPattern = {
       id: Date.now(),
@@ -772,7 +779,7 @@ export default function App() {
 
     setSavedPatterns(prev => [...prev, newPattern]);
     showToast(`Pattern "${name}" saved!`, 'success');
-  }, [showToast]);
+  }, [showToast, getVertices]);
 
   // Delete a saved pattern
   const deletePattern = useCallback((patternId) => {
@@ -792,36 +799,44 @@ export default function App() {
         building: buildingType, // Always use current building type
       };
 
-      // Calculate vertices from center + rotation (same formula as thumbnail preview)
-      const rad = (shape.rotation * Math.PI) / 180;
-      const cos = Math.cos(rad);
-      const sin = Math.sin(rad);
-      const h = SHAPE_SIZE / 2;
-      let localVerts;
-
-      if (shape.type === 'square' || shape.type === 'stair') {
-        localVerts = [
-          { x: -h, y: -h }, { x: h, y: -h },
-          { x: h, y: h }, { x: -h, y: h },
-        ];
-      } else if (shape.type === 'corner') {
-        localVerts = [
-          { x: -h, y: -h }, { x: h, y: -h }, { x: -h, y: h },
-        ];
+      // Use saved local vertices if available (preserves exact geometry)
+      if (ps.localVerts) {
+        shape._verts = ps.localVerts.map(v => ({
+          x: shape.x + v.x,
+          y: shape.y + v.y,
+        }));
       } else {
-        const apexY = -TRI_HEIGHT * 2 / 3;
-        const baseY = TRI_HEIGHT / 3;
-        localVerts = [
-          { x: 0, y: apexY },
-          { x: h, y: baseY },
-          { x: -h, y: baseY },
-        ];
-      }
+        // Fallback for old patterns without localVerts
+        const rad = (shape.rotation * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        const h = SHAPE_SIZE / 2;
+        let defaultLocalVerts;
 
-      shape._verts = localVerts.map(v => ({
-        x: shape.x + v.x * cos - v.y * sin,
-        y: shape.y + v.x * sin + v.y * cos,
-      }));
+        if (shape.type === 'square' || shape.type === 'stair') {
+          defaultLocalVerts = [
+            { x: -h, y: -h }, { x: h, y: -h },
+            { x: h, y: h }, { x: -h, y: h },
+          ];
+        } else if (shape.type === 'corner') {
+          defaultLocalVerts = [
+            { x: -h, y: -h }, { x: h, y: -h }, { x: -h, y: h },
+          ];
+        } else {
+          const apexY = -TRI_HEIGHT * 2 / 3;
+          const baseY = TRI_HEIGHT / 3;
+          defaultLocalVerts = [
+            { x: 0, y: apexY },
+            { x: h, y: baseY },
+            { x: -h, y: baseY },
+          ];
+        }
+
+        shape._verts = defaultLocalVerts.map(v => ({
+          x: shape.x + v.x * cos - v.y * sin,
+          y: shape.y + v.x * sin + v.y * cos,
+        }));
+      }
 
       return shape;
     });
@@ -4472,69 +4487,60 @@ export default function App() {
                         <svg width="70" height="70" className="flex-shrink-0">
                           <g transform={`translate(${offsetX}, ${offsetY}) scale(${scale})`}>
                             {pattern.shapes.map((ps, i) => {
-                              const h = SHAPE_SIZE / 2;
-                              const rad = (ps.rotation * Math.PI) / 180;
-                              const cos = Math.cos(rad);
-                              const sin = Math.sin(rad);
                               // Preview always uses current building type colors
                               const colors = COLOR_SCHEMES[buildingType] || COLOR_SCHEMES.atreides;
                               const shapeColors = colors[ps.type] || colors.square;
 
-                              if (ps.type === 'square' || ps.type === 'stair') {
-                                const corners = [
-                                  { x: -h, y: -h }, { x: h, y: -h },
-                                  { x: h, y: h }, { x: -h, y: h },
-                                ].map(c => ({
-                                  x: ps.relX + c.x * cos - c.y * sin,
-                                  y: ps.relY + c.x * sin + c.y * cos,
+                              // Use saved localVerts if available, otherwise calculate from rotation
+                              let corners;
+                              if (ps.localVerts) {
+                                // localVerts are relative to shape center, add relX/relY to position
+                                corners = ps.localVerts.map(v => ({
+                                  x: ps.relX + v.x,
+                                  y: ps.relY + v.y,
                                 }));
-                                return (
-                                  <polygon
-                                    key={i}
-                                    points={corners.map(c => `${c.x},${c.y}`).join(' ')}
-                                    fill={shapeColors.fill}
-                                    stroke={shapeColors.stroke}
-                                    strokeWidth="2"
-                                  />
-                                );
-                              } else if (ps.type === 'corner') {
-                                const corners = [
-                                  { x: -h, y: -h }, { x: h, y: -h }, { x: -h, y: h },
-                                ].map(c => ({
-                                  x: ps.relX + c.x * cos - c.y * sin,
-                                  y: ps.relY + c.x * sin + c.y * cos,
-                                }));
-                                return (
-                                  <polygon
-                                    key={i}
-                                    points={corners.map(c => `${c.x},${c.y}`).join(' ')}
-                                    fill={shapeColors.fill}
-                                    stroke={shapeColors.stroke}
-                                    strokeWidth="2"
-                                  />
-                                );
                               } else {
-                                // Triangle
-                                const apexY = -TRI_HEIGHT * 2 / 3;
-                                const baseY = TRI_HEIGHT / 3;
-                                const corners = [
-                                  { x: 0, y: apexY },
-                                  { x: h, y: baseY },
-                                  { x: -h, y: baseY },
-                                ].map(c => ({
+                                // Fallback for old patterns
+                                const h = SHAPE_SIZE / 2;
+                                const rad = (ps.rotation * Math.PI) / 180;
+                                const cos = Math.cos(rad);
+                                const sin = Math.sin(rad);
+                                let localVerts;
+
+                                if (ps.type === 'square' || ps.type === 'stair') {
+                                  localVerts = [
+                                    { x: -h, y: -h }, { x: h, y: -h },
+                                    { x: h, y: h }, { x: -h, y: h },
+                                  ];
+                                } else if (ps.type === 'corner') {
+                                  localVerts = [
+                                    { x: -h, y: -h }, { x: h, y: -h }, { x: -h, y: h },
+                                  ];
+                                } else {
+                                  const apexY = -TRI_HEIGHT * 2 / 3;
+                                  const baseY = TRI_HEIGHT / 3;
+                                  localVerts = [
+                                    { x: 0, y: apexY },
+                                    { x: h, y: baseY },
+                                    { x: -h, y: baseY },
+                                  ];
+                                }
+
+                                corners = localVerts.map(c => ({
                                   x: ps.relX + c.x * cos - c.y * sin,
                                   y: ps.relY + c.x * sin + c.y * cos,
                                 }));
-                                return (
-                                  <polygon
-                                    key={i}
-                                    points={corners.map(c => `${c.x},${c.y}`).join(' ')}
-                                    fill={shapeColors.fill}
-                                    stroke={shapeColors.stroke}
-                                    strokeWidth="2"
-                                  />
-                                );
                               }
+
+                              return (
+                                <polygon
+                                  key={i}
+                                  points={corners.map(c => `${c.x},${c.y}`).join(' ')}
+                                  fill={shapeColors.fill}
+                                  stroke={shapeColors.stroke}
+                                  strokeWidth="2"
+                                />
+                              );
                             })}
                           </g>
                         </svg>
