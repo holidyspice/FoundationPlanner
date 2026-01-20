@@ -3707,7 +3707,7 @@ export default function App() {
   // Render item sidebar
   const renderItemSidebar = () => {
     return (
-      <div className={`bg-slate-800 rounded-xl border-2 border-slate-700 transition-all duration-300 ${itemSidebarOpen ? 'w-56 p-4' : 'w-8 p-1'}`}>
+      <div className={`bg-slate-800 rounded-xl border-2 border-slate-700 transition-all duration-300 flex-shrink-0 w-48 ${itemSidebarOpen ? 'p-4' : 'p-1'}`}>
         {/* Toggle button (collapsed) / Header (expanded) */}
         {itemSidebarOpen ? (
           <div className="text-amber-400 font-bold text-center text-lg mb-3">Item Mode</div>
@@ -3874,8 +3874,7 @@ export default function App() {
       </div>
 
       {/* Controls row: mouse assignments, clear, reset view, zoom */}
-      {/* ml-[158px] offsets for left sidebar to center with canvas */}
-      <div className="flex flex-wrap items-center justify-center gap-2 mb-3 ml-[158px]">
+      <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
         {/* Unified controls panel */}
         <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-3">
           {/* Mouse button assignments */}
@@ -4061,9 +4060,10 @@ export default function App() {
         </div>
       </div>
 
-      <div className="flex gap-4">
+      {/* Fixed width container keeps layout consistent when sidebars expand/collapse */}
+      <div className="flex gap-4" style={{ width: '1316px' }}>
         {/* Left Sidebar - Building Type & Fief Controls */}
-        <div className="bg-slate-800 rounded-xl border-2 border-slate-700 w-48 p-4">
+        <div className="bg-slate-800 rounded-xl border-2 border-slate-700 w-48 p-4 flex-shrink-0">
           {/* Building Type */}
           <div className="text-slate-300 font-bold text-center text-lg mb-3">Building Type</div>
           <div className="flex flex-col gap-1 mb-3">
@@ -4277,7 +4277,7 @@ export default function App() {
       </div>
 
       {/* Instructions bar with Share/Discord on right */}
-      <div className="w-full max-w-4xl flex items-center justify-between mt-3 bg-slate-800/50 px-4 py-2 rounded-lg ml-[158px]">
+      <div className="w-full max-w-4xl flex items-center justify-between mt-3 bg-slate-800/50 px-4 py-2 rounded-lg">
         <div className="flex items-center gap-3">
           {/* Help button */}
           <button
