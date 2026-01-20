@@ -4471,9 +4471,8 @@ export default function App() {
                               const rad = (ps.rotation * Math.PI) / 180;
                               const cos = Math.cos(rad);
                               const sin = Math.sin(rad);
-                              // Use saved building type colors, fallback to current buildingType for old patterns
-                              const shapeBuilding = ps.building || buildingType;
-                              const colors = COLOR_SCHEMES[shapeBuilding] || COLOR_SCHEMES.atreides;
+                              // Preview always uses current building type colors
+                              const colors = COLOR_SCHEMES[buildingType] || COLOR_SCHEMES.atreides;
                               const shapeColors = colors[ps.type] || colors.square;
 
                               if (ps.type === 'square' || ps.type === 'stair') {
