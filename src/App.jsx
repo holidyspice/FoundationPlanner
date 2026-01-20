@@ -3707,8 +3707,7 @@ export default function App() {
   // Render item sidebar
   const renderItemSidebar = () => {
     return (
-      <div className="w-48 flex-shrink-0">
-        <div className={`bg-slate-800 rounded-xl border-2 border-slate-700 transition-all duration-300 ${itemSidebarOpen ? 'w-48 p-4' : 'w-10 p-1'}`}>
+        <div className={`bg-slate-800 rounded-xl border-2 border-slate-700 transition-all duration-300 flex-shrink-0 ${itemSidebarOpen ? 'w-48 p-4' : 'w-10 p-1'}`}>
           {/* Toggle button (collapsed) / Header (expanded) */}
           {itemSidebarOpen ? (
             <div className="text-amber-400 font-bold text-center text-lg mb-3">Item Mode</div>
@@ -3862,7 +3861,6 @@ export default function App() {
           </>
         )}
         </div>
-      </div>
     );
   };
 
@@ -4062,8 +4060,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* Fixed width container keeps layout consistent when sidebars expand/collapse */}
-      <div className="flex gap-4" style={{ width: '1316px' }}>
+      {/* Main content area */}
+      <div className="flex gap-4">
         {/* Left Sidebar - Building Type & Fief Controls */}
         <div className="bg-slate-800 rounded-xl border-2 border-slate-700 w-48 p-4 flex-shrink-0">
           {/* Building Type */}
