@@ -3707,7 +3707,7 @@ export default function App() {
   // Render item sidebar
   const renderItemSidebar = () => {
     return (
-      <div className="w-48 flex-shrink-0 flex justify-end">
+      <div className="w-48 flex-shrink-0">
         <div className={`bg-slate-800 rounded-xl border-2 border-slate-700 transition-all duration-300 ${itemSidebarOpen ? 'w-48 p-4' : 'w-10 p-1'}`}>
           {/* Toggle button (collapsed) / Header (expanded) */}
           {itemSidebarOpen ? (
