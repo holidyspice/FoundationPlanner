@@ -4366,42 +4366,23 @@ export default function App() {
       </div>
 
       {/* Instructions bar with stats and Share/Discord */}
-      <div className="flex items-center justify-between mt-3 bg-slate-800/50 px-4 py-2 rounded-lg ml-[96px]" style={{ width: '900px' }}>
-        <div className="flex items-center gap-3">
-          {/* Help button */}
-          <button
-            onClick={() => setShowHelpModal(true)}
-            className="bg-green-600 hover:bg-green-500 text-white w-7 h-7 rounded-lg text-base font-bold transition-colors flex items-center justify-center flex-shrink-0"
-            title="Help (Press ? or H)"
-          >
-            ?
-          </button>
-          {gridEnabled && (
-            <span className="text-cyan-400 font-medium text-sm">Grid Snap</span>
-          )}
-          {itemMode ? (
-            <p className="text-slate-400 text-sm">
-              <span className="text-purple-400 font-medium">Item Mode:</span>
-              <span className="ml-2">Drag</span> to move ·
-              <span className="ml-2">Right-click</span> to delete
-            </p>
-          ) : isLocked ? (
-            <p className="text-slate-400 text-sm">
-              <span className="text-amber-400 font-medium">Lock Mode:</span>
-              <span className="ml-2">Drag</span> to move ·
-              <span className="ml-2">Shift+drag</span> to rotate ·
-              <span className="ml-2">Right-click</span> to save pattern
-            </p>
-          ) : (
-            <p className="text-slate-400 text-sm">
-              <span className="text-blue-400 font-medium">Design:</span>
-              <span className="ml-2">Hold+drag</span> to rotate ·
-              <span className="ml-2">1-5</span> to change shape ·
-              <span className="ml-2">Scroll</span> to zoom
-            </p>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
+      <div className="mt-3 bg-slate-800/50 px-4 py-2 rounded-lg ml-[96px]" style={{ width: '900px' }}>
+        {/* Top row: Help, Grid, Stats, Share, Discord */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            {/* Help button */}
+            <button
+              onClick={() => setShowHelpModal(true)}
+              className="bg-green-600 hover:bg-green-500 text-white w-7 h-7 rounded-lg text-base font-bold transition-colors flex items-center justify-center flex-shrink-0"
+              title="Help (Press ? or H)"
+            >
+              ?
+            </button>
+            {gridEnabled && (
+              <span className="text-cyan-400 font-medium text-sm">Grid Snap</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
           {/* Pieces and Cost */}
           <div className="bg-slate-800 px-3 py-1 rounded text-xs flex items-center gap-2">
             <span className="text-blue-400 font-medium">{squareCount}</span><span className="text-slate-500">□</span>
@@ -4488,6 +4469,31 @@ export default function App() {
           </button>
         </div>
       )}
+        {/* Bottom row: Mode-specific instructions */}
+        <div className="mt-2 pt-2 border-t border-slate-700/50">
+          {itemMode ? (
+            <p className="text-slate-400 text-sm text-center">
+              <span className="text-purple-400 font-medium">Item Mode:</span>
+              <span className="ml-2">Drag</span> to move ·
+              <span className="ml-2">Right-click</span> to delete
+            </p>
+          ) : isLocked ? (
+            <p className="text-slate-400 text-sm text-center">
+              <span className="text-amber-400 font-medium">Lock Mode:</span>
+              <span className="ml-2">Drag</span> to move ·
+              <span className="ml-2">Shift+drag</span> to rotate ·
+              <span className="ml-2">Right-click</span> to save pattern
+            </p>
+          ) : (
+            <p className="text-slate-400 text-sm text-center">
+              <span className="text-blue-400 font-medium">Design:</span>
+              <span className="ml-2">Hold+drag</span> to rotate ·
+              <span className="ml-2">1-5</span> to change shape ·
+              <span className="ml-2">Scroll</span> to zoom
+            </p>
+          )}
+        </div>
+      </div>
 
       {/* Saved Patterns Panel - visible only in lock mode */}
       {isLocked && (
