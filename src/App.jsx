@@ -677,24 +677,26 @@ export default function App() {
 
       // Number keys 1-5 for shape selection (not in item mode or lock mode)
       // Without Shift: Left click shape
-      // With Shift: Right click shape
+      // With Shift (! @ # $ %): Right click shape
       const shapeKeys = ['1', '2', '3', '4', '5'];
+      const shiftedKeys = ['!', '@', '#', '$', '%']; // Shift+1-5 on US keyboard
       const shapeTypes = ['square', 'triangle', 'corner', 'stair', 'delete'];
       const shapeLabels = ['Square', 'Triangle', 'Corner', 'Stair', 'Delete'];
 
-      if (shapeKeys.includes(e.key) && !e.ctrlKey && !e.metaKey && !isLocked && !itemMode) {
+      // Check for unshifted number keys (left-click assignment)
+      if (shapeKeys.includes(e.key) && !e.ctrlKey && !e.metaKey && !e.shiftKey && !isLocked && !itemMode) {
         e.preventDefault();
         const index = shapeKeys.indexOf(e.key);
-        const shapeType = shapeTypes[index];
-        const label = shapeLabels[index];
+        setLeftClickShape(shapeTypes[index]);
+        showToast(`Left-click: ${shapeLabels[index]}`, 'info', 1500);
+      }
 
-        if (e.shiftKey) {
-          setRightClickShape(shapeType);
-          showToast(`Right-click: ${label}`, 'info', 1500);
-        } else {
-          setLeftClickShape(shapeType);
-          showToast(`Left-click: ${label}`, 'info', 1500);
-        }
+      // Check for shifted keys (right-click assignment)
+      if (shiftedKeys.includes(e.key) && !e.ctrlKey && !e.metaKey && !isLocked && !itemMode) {
+        e.preventDefault();
+        const index = shiftedKeys.indexOf(e.key);
+        setRightClickShape(shapeTypes[index]);
+        showToast(`Right-click: ${shapeLabels[index]}`, 'info', 1500);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
