@@ -3936,7 +3936,7 @@ export default function App() {
     <div className={`min-h-screen bg-gradient-to-b from-slate-900 to-slate-950 p-4 flex flex-col items-center ${isWideMode ? 'px-2' : ''}`}>
       <div className="mb-4 text-center w-full relative">
         <div className="flex items-center justify-center gap-3">
-          <img src="/logo.png" alt="Logo" className="w-[95px] h-14" />
+          <img src="/logo.png" alt="Logo" className="h-14" />
           <div>
             <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
               Dune: Awakening Base Planner
