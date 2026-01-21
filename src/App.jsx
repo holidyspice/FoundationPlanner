@@ -758,7 +758,12 @@ export default function App() {
 
     // Store shapes with relative positions and local vertices (relative to each shape's own center)
     const patternShapes = groupShapes.map(s => {
-      const verts = s._verts || getVertices(s);
+      // Use existing vertices - all shapes should have _verts
+      const verts = s._verts;
+      if (!verts) {
+        console.warn('Shape missing _verts:', s);
+        return null;
+      }
       // Store vertices relative to the shape's own center
       const localVerts = verts.map(v => ({ x: v.x - s.x, y: v.y - s.y }));
 
@@ -769,7 +774,7 @@ export default function App() {
         rotation: s.rotation,
         localVerts, // Vertices relative to shape center - preserves actual geometry
       };
-    });
+    }).filter(Boolean);
 
     const newPattern = {
       id: Date.now(),
@@ -779,7 +784,7 @@ export default function App() {
 
     setSavedPatterns(prev => [...prev, newPattern]);
     showToast(`Pattern "${name}" saved!`, 'success');
-  }, [showToast, getVertices]);
+  }, [showToast]);
 
   // Delete a saved pattern
   const deletePattern = useCallback((patternId) => {
