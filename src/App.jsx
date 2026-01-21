@@ -674,10 +674,32 @@ export default function App() {
           return !prev;
         });
       }
+
+      // Number keys 1-5 for shape selection (not in item mode or lock mode)
+      // Without Shift: Left click shape
+      // With Shift: Right click shape
+      const shapeKeys = ['1', '2', '3', '4', '5'];
+      const shapeTypes = ['square', 'triangle', 'corner', 'stair', 'delete'];
+      const shapeLabels = ['Square', 'Triangle', 'Corner', 'Stair', 'Delete'];
+
+      if (shapeKeys.includes(e.key) && !e.ctrlKey && !e.metaKey && !isLocked && !itemMode) {
+        e.preventDefault();
+        const index = shapeKeys.indexOf(e.key);
+        const shapeType = shapeTypes[index];
+        const label = shapeLabels[index];
+
+        if (e.shiftKey) {
+          setRightClickShape(shapeType);
+          showToast(`Right-click: ${label}`, 'info', 1500);
+        } else {
+          setLeftClickShape(shapeType);
+          showToast(`Left-click: ${label}`, 'info', 1500);
+        }
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedItemId, currentFloor, isLocked, shapes, clipboard, setShapes, setPlacedItems, showHelpModal]);
+  }, [selectedItemId, currentFloor, isLocked, shapes, clipboard, setShapes, setPlacedItems, showHelpModal, itemMode, showToast]);
 
   // =====================================================
   // AUTO-SAVE & RESTORE
@@ -4343,23 +4365,23 @@ export default function App() {
           )}
           {itemMode ? (
             <p className="text-slate-400 text-sm">
-              <span className="text-blue-400 font-medium">Item Mode:</span>
-              <span className="text-slate-400 ml-2">Click</span> Select ·
-              <span className="text-slate-400 ml-2">Drag</span> Move ·
-              <span className="text-slate-400 ml-2">Right-click/Del</span> Delete
+              <span className="text-purple-400 font-medium">Item Mode:</span>
+              <span className="ml-2">Drag</span> to move ·
+              <span className="ml-2">Right-click</span> to delete
             </p>
           ) : isLocked ? (
             <p className="text-slate-400 text-sm">
               <span className="text-amber-400 font-medium">Lock Mode:</span>
-              <span className="text-slate-400 ml-2">Drag</span> Move ·
-              <span className="text-slate-400 ml-2">Shift+Drag</span> Rotate ·
-              <span className="text-slate-400 ml-2">Ctrl+C/V</span> Copy/Paste
+              <span className="ml-2">Drag</span> to move ·
+              <span className="ml-2">Shift+drag</span> to rotate ·
+              <span className="ml-2">Right-click</span> to save pattern
             </p>
           ) : (
             <p className="text-slate-400 text-sm">
-              <span className="text-slate-400">Hold + Drag</span> Rotate ·
-              <span className="text-slate-400 ml-2">Scroll</span> Zoom ·
-              <span className="text-slate-400 ml-2">Ctrl+Z</span> Undo
+              <span className="text-blue-400 font-medium">Design:</span>
+              <span className="ml-2">Hold+drag</span> to rotate ·
+              <span className="ml-2">1-5</span> to change shape ·
+              <span className="ml-2">Scroll</span> to zoom
             </p>
           )}
         </div>
@@ -4631,7 +4653,7 @@ export default function App() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowHelpModal(false)}>
           <div className="bg-slate-800 rounded-xl p-6 shadow-2xl border-2 border-slate-700 max-w-2xl max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-bold text-white">Keyboard Shortcuts & Help</h3>
+              <h3 className="text-xl font-bold text-white">Help</h3>
               <button onClick={() => setShowHelpModal(false)} className="text-slate-400 hover:text-white">
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -4640,29 +4662,25 @@ export default function App() {
             </div>
 
             <div className="space-y-4">
-              {/* General */}
+              {/* Navigation */}
               <div>
-                <h4 className="text-amber-400 font-medium mb-2">General</h4>
+                <h4 className="text-slate-400 font-medium mb-2">Navigation</h4>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Help</span>
-                    <kbd className="bg-slate-600 px-2 py-0.5 rounded text-xs text-white">?</kbd>
+                    <span className="text-slate-300">Pan</span>
+                    <span className="text-slate-400 text-xs">Middle-drag or Shift+drag</span>
+                  </div>
+                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
+                    <span className="text-slate-300">Zoom</span>
+                    <span className="text-slate-400 text-xs">Scroll wheel</span>
                   </div>
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
                     <span className="text-slate-300">Undo</span>
                     <kbd className="bg-slate-600 px-2 py-0.5 rounded text-xs text-white">Ctrl+Z</kbd>
                   </div>
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Toggle Grid</span>
+                    <span className="text-slate-300">Toggle grid snap</span>
                     <kbd className="bg-slate-600 px-2 py-0.5 rounded text-xs text-white">G</kbd>
-                  </div>
-                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Toggle Lock Mode</span>
-                    <kbd className="bg-slate-600 px-2 py-0.5 rounded text-xs text-white">L</kbd>
-                  </div>
-                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Close/Cancel</span>
-                    <kbd className="bg-slate-600 px-2 py-0.5 rounded text-xs text-white">Esc</kbd>
                   </div>
                 </div>
               </div>
@@ -4670,72 +4688,73 @@ export default function App() {
               {/* Design Mode */}
               <div>
                 <h4 className="text-blue-400 font-medium mb-2">Design Mode</h4>
+                <p className="text-slate-500 text-xs mb-2">Place foundation shapes on the canvas</p>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Place Shape</span>
-                    <span className="text-slate-400 text-xs">Left/Right Click</span>
+                    <span className="text-slate-300">Place with rotation</span>
+                    <span className="text-slate-400 text-xs">Hold click + drag</span>
                   </div>
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Rotate Shape</span>
-                    <span className="text-slate-400 text-xs">Hold + Drag</span>
+                    <span className="text-slate-300">Place without rotation</span>
+                    <span className="text-slate-400 text-xs">Click or middle-click</span>
                   </div>
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Quick Place</span>
-                    <span className="text-slate-400 text-xs">Middle Click</span>
+                    <span className="text-slate-300">Set left-click shape</span>
+                    <span className="text-slate-400 text-xs">1-5</span>
                   </div>
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Pan Canvas</span>
-                    <span className="text-slate-400 text-xs">Middle Drag</span>
+                    <span className="text-slate-300">Set right-click shape</span>
+                    <span className="text-slate-400 text-xs">Shift + 1-5</span>
                   </div>
-                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Zoom</span>
-                    <span className="text-slate-400 text-xs">Scroll Wheel</span>
-                  </div>
+                </div>
+                <div className="mt-2 text-xs text-slate-500">
+                  1=Square · 2=Triangle · 3=Corner · 4=Stair · 5=Delete
                 </div>
               </div>
 
               {/* Lock Mode */}
               <div>
-                <h4 className="text-amber-400 font-medium mb-2">Lock Mode (Move Groups)</h4>
+                <h4 className="text-amber-400 font-medium mb-2">Lock Mode <kbd className="bg-slate-600 px-1.5 py-0.5 rounded text-xs text-white ml-2">L</kbd></h4>
+                <p className="text-slate-500 text-xs mb-2">Move and copy connected shape groups</p>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Move Group</span>
+                    <span className="text-slate-300">Move group</span>
                     <span className="text-slate-400 text-xs">Drag</span>
                   </div>
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Rotate Group</span>
-                    <span className="text-slate-400 text-xs">Shift + Drag</span>
+                    <span className="text-slate-300">Rotate group</span>
+                    <span className="text-slate-400 text-xs">Shift + drag</span>
                   </div>
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Copy Group</span>
-                    <kbd className="bg-slate-600 px-2 py-0.5 rounded text-xs text-white">Ctrl+C</kbd>
+                    <span className="text-slate-300">Copy/Paste group</span>
+                    <span className="text-slate-400 text-xs">Ctrl+C / Ctrl+V</span>
                   </div>
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Paste Group</span>
-                    <kbd className="bg-slate-600 px-2 py-0.5 rounded text-xs text-white">Ctrl+V</kbd>
+                    <span className="text-slate-300">Save as pattern</span>
+                    <span className="text-slate-400 text-xs">Right-click group</span>
                   </div>
-                  <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Save Pattern</span>
-                    <span className="text-slate-400 text-xs">Right Click</span>
-                  </div>
+                </div>
+                <div className="mt-2 text-xs text-slate-500">
+                  Saved patterns appear in a bar below the canvas. Drag to place.
                 </div>
               </div>
 
               {/* Item Mode */}
               <div>
                 <h4 className="text-purple-400 font-medium mb-2">Item Mode</h4>
+                <p className="text-slate-500 text-xs mb-2">Place base management items (generators, refiners, etc.)</p>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Select Item</span>
-                    <span className="text-slate-400 text-xs">Click</span>
+                    <span className="text-slate-300">Add item</span>
+                    <span className="text-slate-400 text-xs">Drag from right panel</span>
                   </div>
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Move Item</span>
-                    <span className="text-slate-400 text-xs">Drag</span>
+                    <span className="text-slate-300">Move item</span>
+                    <span className="text-slate-400 text-xs">Drag on canvas</span>
                   </div>
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Delete Item</span>
-                    <span className="text-slate-400 text-xs">Right-click / Del</span>
+                    <span className="text-slate-300">Delete item</span>
+                    <span className="text-slate-400 text-xs">Right-click or Del</span>
                   </div>
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
                     <span className="text-slate-300">Deselect</span>
@@ -4744,16 +4763,24 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Tips */}
+              {/* Fief & Floors */}
+              <div>
+                <h4 className="text-green-400 font-medium mb-2">Fief & Floors</h4>
+                <div className="text-sm text-slate-300 space-y-1">
+                  <p>• Drag a <span className="text-amber-400">fief</span> from the left panel to set your build boundary</p>
+                  <p>• Drag <span className="text-amber-400">stakes</span> to adjacent zones to expand your territory</p>
+                  <p>• Use the <span className="text-amber-400">floor selector</span> in the toolbar for multi-story builds</p>
+                </div>
+              </div>
+
+              {/* Saving & Sharing */}
               <div className="border-t border-slate-600 pt-4">
-                <h4 className="text-green-400 font-medium mb-2">Tips</h4>
-                <ul className="text-sm text-slate-300 space-y-1">
-                  <li>• Your design auto-saves every 30 seconds</li>
-                  <li>• Use the Share button to get a link to your design</li>
-                  <li>• Drag fiefs and stakes from the left panel</li>
-                  <li>• Connected shapes become groups in Lock Mode</li>
-                  <li>• Use multiple floors for multi-story buildings</li>
-                </ul>
+                <h4 className="text-cyan-400 font-medium mb-2">Saving & Sharing</h4>
+                <div className="text-sm text-slate-300 space-y-1">
+                  <p>• Your design <span className="text-green-400">auto-saves</span> every 30 seconds</p>
+                  <p>• Click <span className="text-amber-400">Share</span> to copy a link to your design</p>
+                  <p>• Use the <span className="text-indigo-400">Discord</span> button to post directly to a channel</p>
+                </div>
               </div>
             </div>
           </div>
