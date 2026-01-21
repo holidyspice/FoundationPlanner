@@ -4213,9 +4213,11 @@ export default function App() {
         </div>
 
         {/* Canvas */}
-        <div className={`bg-slate-800 shadow-2xl overflow-hidden border-y-2 border-slate-700 ${itemSidebarOpen ? '' : 'border-r-2 rounded-r-xl'}`}>
+        <div className={`bg-slate-800 shadow-2xl overflow-hidden border-y-2 border-slate-700 ${itemSidebarOpen ? '' : 'border-r-2 rounded-r-xl'}`} style={{ minHeight: '600px' }}>
         <svg
-          width="900" height="600"
+          width="900" height="100%"
+          viewBox="0 0 900 600"
+          preserveAspectRatio="xMidYMin meet"
           onContextMenu={(e) => e.preventDefault()}
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
