@@ -440,6 +440,7 @@ export default function App() {
   // Lock mode state
   const [isLocked, setIsLocked] = useState(false);
   const [hoveredGroup, setHoveredGroup] = useState([]); // IDs of shapes in hovered group
+  const hoveringOnSaveIconRef = useRef(false); // Track if mouse is over save icon
   const [isDraggingGroup, setIsDraggingGroup] = useState(false);
   const [draggedGroupIds, setDraggedGroupIds] = useState([]);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -2500,12 +2501,12 @@ export default function App() {
         return;
       }
 
-      // Update hovered group
+      // Update hovered group (but don't clear if hovering on save icon)
       const shape = findShapeAtPoint(px, py);
       if (shape) {
         const groupIds = findConnectedGroup(shape);
         setHoveredGroup(groupIds);
-      } else {
+      } else if (!hoveringOnSaveIconRef.current) {
         setHoveredGroup([]);
       }
       setHoverInfo(null);
@@ -3193,6 +3194,8 @@ export default function App() {
         transform={`translate(${iconX - iconSize/2}, ${iconY - iconSize/2})`}
         style={{ cursor: 'pointer' }}
         onClick={handleSaveClick}
+        onMouseEnter={() => { hoveringOnSaveIconRef.current = true; }}
+        onMouseLeave={() => { hoveringOnSaveIconRef.current = false; setHoveredGroup([]); }}
       >
         {/* Background circle */}
         <circle
