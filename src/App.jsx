@@ -703,6 +703,17 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedItemId, currentFloor, isLocked, shapes, clipboard, setShapes, setPlacedItems, showHelpModal, itemMode, showToast]);
 
+  // Prevent context menu globally when pattern modal is open or in lock mode
+  useEffect(() => {
+    const preventContextMenu = (e) => {
+      if (showPatternNameModal || isLocked) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener('contextmenu', preventContextMenu);
+    return () => document.removeEventListener('contextmenu', preventContextMenu);
+  }, [showPatternNameModal, isLocked]);
+
   // =====================================================
   // AUTO-SAVE & RESTORE
   // =====================================================
