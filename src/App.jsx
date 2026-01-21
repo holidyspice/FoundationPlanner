@@ -440,7 +440,6 @@ export default function App() {
   // Lock mode state
   const [isLocked, setIsLocked] = useState(false);
   const [hoveredGroup, setHoveredGroup] = useState([]); // IDs of shapes in hovered group
-  const hoveringOnSaveIconRef = useRef(false); // Track if mouse is over save icon
   const [isDraggingGroup, setIsDraggingGroup] = useState(false);
   const [draggedGroupIds, setDraggedGroupIds] = useState([]);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
@@ -2501,12 +2500,12 @@ export default function App() {
         return;
       }
 
-      // Update hovered group (but don't clear if hovering on save icon)
+      // Update hovered group
       const shape = findShapeAtPoint(px, py);
       if (shape) {
         const groupIds = findConnectedGroup(shape);
         setHoveredGroup(groupIds);
-      } else if (!hoveringOnSaveIconRef.current) {
+      } else {
         setHoveredGroup([]);
       }
       setHoverInfo(null);
@@ -2591,6 +2590,14 @@ export default function App() {
 
       const groupIds = findConnectedGroup(shape);
       const groupShapes = getShapesByIds(groupIds);
+
+      // Right-click in lock mode - save pattern
+      if (e.button === 2) {
+        setPendingPatternShapes(groupShapes);
+        setPatternName('');
+        setShowPatternNameModal(true);
+        return;
+      }
 
       // Store original positions for potential reset
       const originals = groupShapes.map(s => ({
@@ -3154,71 +3161,6 @@ export default function App() {
     });
   };
 
-  // Render save icon for hovered group in lock mode
-  const renderGroupSaveIcon = () => {
-    if (!isLocked || hoveredGroup.length === 0 || isDraggingGroup || isRotatingGroup) {
-      return null;
-    }
-
-    // Get shapes in the hovered group
-    const groupShapes = shapes.filter(s => hoveredGroup.includes(s.id));
-    if (groupShapes.length === 0) return null;
-
-    // Calculate bounding box of the group
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const shape of groupShapes) {
-      const verts = shape._verts || [];
-      for (const v of verts) {
-        minX = Math.min(minX, v.x);
-        minY = Math.min(minY, v.y);
-        maxX = Math.max(maxX, v.x);
-        maxY = Math.max(maxY, v.y);
-      }
-    }
-
-    // Position icon at top-right corner of bounding box
-    const iconX = maxX + 8;
-    const iconY = minY - 8;
-    const iconSize = 24;
-
-    const handleSaveClick = (e) => {
-      e.stopPropagation();
-      e.preventDefault();
-      setPendingPatternShapes(groupShapes);
-      setPatternName('');
-      setShowPatternNameModal(true);
-    };
-
-    return (
-      <g
-        transform={`translate(${iconX - iconSize/2}, ${iconY - iconSize/2})`}
-        style={{ cursor: 'pointer' }}
-        onClick={handleSaveClick}
-        onMouseEnter={() => { hoveringOnSaveIconRef.current = true; }}
-        onMouseLeave={() => { hoveringOnSaveIconRef.current = false; setHoveredGroup([]); }}
-      >
-        {/* Background circle */}
-        <circle
-          cx={iconSize/2}
-          cy={iconSize/2}
-          r={iconSize/2}
-          fill="#16a34a"
-          stroke="#fff"
-          strokeWidth={2}
-        />
-        {/* Save/floppy disk icon */}
-        <path
-          d="M7 5h8l2 2v10H7V5z M9 5v4h4V5 M9 12h6v5H9v-5z"
-          fill="none"
-          stroke="#fff"
-          strokeWidth={1.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          transform="translate(2, 2)"
-        />
-      </g>
-    );
-  };
 
   // Render silhouette of floor below (faded shapes and items)
   const renderFloorBelowSilhouette = () => {
@@ -4287,7 +4229,6 @@ export default function App() {
             {renderStakeDropZones()}
             {renderFloorBelowSilhouette()}
             {renderShapes()}
-            {renderGroupSaveIcon()}
             {renderPlacedItems()}
             {renderHoverPreview()}
 
@@ -4436,7 +4377,7 @@ export default function App() {
               <span className="text-amber-400 font-medium">Lock Mode:</span>
               <span className="ml-2">Drag</span> to move ·
               <span className="ml-2">Shift+drag</span> to rotate ·
-              <span className="ml-2 text-green-400">●</span> to save pattern
+              <span className="ml-2">Right-click</span> to save pattern
             </p>
           ) : (
             <p className="text-slate-400 text-sm">
@@ -4541,11 +4482,11 @@ export default function App() {
           <div className="bg-slate-800 rounded-lg border-2 border-slate-700 p-3">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-slate-300 font-medium text-sm">Saved Patterns</h3>
-              <span className="text-slate-500 text-xs">Hover a group and click <span className="text-green-400">●</span> to save · Drag to place</span>
+              <span className="text-slate-500 text-xs">Right-click a group to save · Drag to place</span>
             </div>
             {savedPatterns.length === 0 ? (
               <div className="text-slate-500 text-sm py-4 text-center">
-                No patterns saved. Hover over a group and click the green save icon.
+                No patterns saved. Right-click on a connected group to save it as a pattern.
               </div>
             ) : (
               <div className="flex gap-3 overflow-x-auto custom-scrollbar pb-2">
@@ -4793,11 +4734,11 @@ export default function App() {
                   </div>
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
                     <span className="text-slate-300">Save as pattern</span>
-                    <span className="text-slate-400 text-xs flex items-center gap-1">Click <span className="text-green-400">●</span> icon</span>
+                    <span className="text-slate-400 text-xs">Right-click group</span>
                   </div>
                 </div>
                 <div className="mt-2 text-xs text-slate-500">
-                  Hover over a group to see the save icon. Saved patterns appear below.
+                  Saved patterns appear in a bar below the canvas. Drag to place.
                 </div>
               </div>
 
