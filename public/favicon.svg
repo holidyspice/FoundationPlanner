@@ -1,7 +1,3 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-  <rect width="100" height="100" rx="10" fill="#1e293b"/>
-  <rect x="15" y="15" width="30" height="30" fill="#3b82f6" rx="2"/>
-  <polygon points="70,15 85,45 55,45" fill="#f97316"/>
-  <path d="M15 55 L45 55 A30 30 0 0 1 15 85 Z" fill="#22c55e"/>
-  <rect x="55" y="55" width="30" height="30" fill="#3b82f6" rx="2"/>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 56 56" width="56" height="56">
+  <image xlink:href="logo.png" x="-19" y="0" width="95" height="56" />
 </svg>

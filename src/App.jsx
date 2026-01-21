@@ -393,10 +393,34 @@ export default function App() {
     });
   }, [currentFloor]);
 
-  const [shapesHistory, setShapesHistory] = useState([]); // Undo history stack
+  const [shapesHistory, setShapesHistory] = useState([]); // Unified undo history for ALL actions
+
+  // Refs to track current state for history saving (avoids stale closures)
+  const allFloorShapesRef = useRef(allFloorShapes);
+  const allFloorItemsRef = useRef(allFloorItems);
+  useEffect(() => { allFloorShapesRef.current = allFloorShapes; }, [allFloorShapes]);
+  useEffect(() => { allFloorItemsRef.current = allFloorItems; }, [allFloorItems]);
+
+  // Save current state to unified history before any modification
+  const saveToHistory = useCallback(() => {
+    const currentShapes = allFloorShapesRef.current;
+    const currentItems = allFloorItemsRef.current;
+    // Deep copy shapes and items to prevent mutation
+    const shapesCopy = {};
+    for (const floor in currentShapes) {
+      shapesCopy[floor] = currentShapes[floor].map(s => ({ ...s, _verts: s._verts ? [...s._verts.map(v => ({ ...v }))] : null }));
+    }
+    const itemsCopy = {};
+    for (const floor in currentItems) {
+      itemsCopy[floor] = currentItems[floor].map(i => ({ ...i }));
+    }
+    setShapesHistory(prev => [...prev.slice(-49), { shapes: shapesCopy, items: itemsCopy }]); // Keep last 50 states
+  }, []);
+
   const [hoverInfo, setHoverInfo] = useState(null);
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isWideMode, setIsWideMode] = useState(false);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [buildingType, setBuildingType] = useState('atreides');
@@ -504,31 +528,17 @@ export default function App() {
     const handleKeyDown = (e) => {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
 
-      // Ctrl+Z - Undo
+      // Ctrl+Z - Undo (unified history - always undoes last action regardless of mode)
       if ((e.key === 'z' || e.key === 'Z') && (e.ctrlKey || e.metaKey)) {
         e.preventDefault();
-        // If we have history, restore from it; otherwise just remove last shape from current floor
-        setShapesHistory(prevHistory => {
-          if (prevHistory.length > 0) {
-            const lastState = prevHistory[prevHistory.length - 1];
-            // Check if it's the new format (object with shapes and items) or old format (array)
-            if (lastState && lastState.shapes && lastState.items) {
-              setAllFloorShapes(lastState.shapes);
-              setAllFloorItems(lastState.items);
-            } else if (Array.isArray(lastState)) {
-              // Old format - just shapes array for floor 0
-              setAllFloorShapes({ 0: lastState });
-            }
-            return prevHistory.slice(0, -1);
-          } else {
-            // Fallback: just remove the last shape from current floor
-            setAllFloorShapes(prev => ({
-              ...prev,
-              [currentFloor]: (prev[currentFloor] || []).slice(0, -1)
-            }));
-            return prevHistory;
+        if (shapesHistory.length > 0) {
+          const lastState = shapesHistory[shapesHistory.length - 1];
+          if (lastState && lastState.shapes && lastState.items) {
+            setAllFloorShapes(lastState.shapes);
+            setAllFloorItems(lastState.items);
           }
-        });
+          setShapesHistory(prev => prev.slice(0, -1));
+        }
       }
 
       // Ctrl+C - Copy group (Lock mode only)
@@ -635,12 +645,14 @@ export default function App() {
           }))
         }));
 
+        saveToHistory();
         setShapes(prev => [...prev, ...newShapes]);
       }
 
       // Delete selected item with Delete or Backspace
       if ((e.key === 'Delete' || e.key === 'Backspace') && selectedItemId !== null) {
         e.preventDefault();
+        saveToHistory();
         setPlacedItems(prev => prev.filter(item => item.id !== selectedItemId));
         setSelectedItemId(null);
       }
@@ -670,7 +682,10 @@ export default function App() {
       if ((e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey) {
         e.preventDefault();
         setIsLocked(prev => {
-          if (!prev) setItemSidebarOpen(false);
+          if (!prev) {
+            // Entering lock mode - close sidebar
+            setItemSidebarOpen(false);
+          }
           return !prev;
         });
       }
@@ -701,7 +716,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedItemId, currentFloor, isLocked, shapes, clipboard, setShapes, setPlacedItems, showHelpModal, itemMode, showToast]);
+  }, [selectedItemId, currentFloor, isLocked, shapes, clipboard, setShapes, setPlacedItems, showHelpModal, itemMode, showToast, saveToHistory, shapesHistory]);
 
   // Prevent context menu globally when pattern modal is open or in lock mode
   useEffect(() => {
@@ -881,9 +896,10 @@ export default function App() {
       return shape;
     });
 
+    saveToHistory();
     setShapes(prev => [...prev, ...newShapes]);
     showToast(`Placed "${pattern.name}"`, 'success');
-  }, [buildingType, showToast, setShapes]);
+  }, [buildingType, showToast, setShapes, saveToHistory]);
 
   // Check for saved state on mount
   useEffect(() => {
@@ -1763,6 +1779,61 @@ export default function App() {
       y: y + v.x * Math.sin(rad) + v.y * Math.cos(rad),
     }));
   }, []);
+
+  // Snap a group to external vertices (vertex-to-vertex snapping for perfect tessellation)
+  const snapGroupToEdges = useCallback((transformedShapes, groupIds) => {
+    if (transformedShapes.length === 0) return transformedShapes;
+
+    // Get all vertices from shapes NOT in the group
+    const externalVertices = [];
+    for (const shape of shapes) {
+      if (groupIds.includes(shape.id)) continue;
+      const verts = shape._verts || getVertices(shape);
+      for (const v of verts) {
+        externalVertices.push({ x: v.x, y: v.y });
+      }
+    }
+
+    if (externalVertices.length === 0) return transformedShapes;
+
+    // Collect all vertices from the group
+    const groupVertices = [];
+    for (const shape of transformedShapes) {
+      for (const v of shape.newVerts) {
+        groupVertices.push(v);
+      }
+    }
+
+    // Find the closest external vertex to any group vertex
+    let bestSnap = null;
+    let minDist = SNAP_THRESHOLD;
+
+    for (const gv of groupVertices) {
+      for (const ev of externalVertices) {
+        const dist = Math.sqrt((gv.x - ev.x) ** 2 + (gv.y - ev.y) ** 2);
+        if (dist < minDist) {
+          minDist = dist;
+          bestSnap = {
+            dx: ev.x - gv.x,
+            dy: ev.y - gv.y
+          };
+        }
+      }
+    }
+
+    // If we found a snap, apply it to all shapes
+    if (bestSnap) {
+      return transformedShapes.map(shape => ({
+        ...shape,
+        newVerts: shape.newVerts.map(v => ({
+          x: v.x + bestSnap.dx,
+          y: v.y + bestSnap.dy
+        }))
+      }));
+    }
+
+    return transformedShapes;
+  }, [shapes, getVertices]);
 
   // =====================================================
   // CONNECTED GROUP DETECTION (for lock mode)
@@ -2671,7 +2742,10 @@ export default function App() {
       // If delete mode, delete shape immediately
       if (shapeType === 'delete') {
         const shape = findShapeAtPoint(px, py);
-        if (shape) setShapes(prev => prev.filter(s => s.id !== shape.id));
+        if (shape) {
+          saveToHistory();
+          setShapes(prev => prev.filter(s => s.id !== shape.id));
+        }
         return;
       }
 
@@ -2700,7 +2774,7 @@ export default function App() {
       setRotationShapeType(shapeType);
       setIsFreePlacement(isFree);
     }
-  }, [pan, isRotating, rotatingButton, screenToWorld, findClosestEdge, calculateSnappedVertices, leftClickShape, rightClickShape, getFreeVertices, findShapeAtPoint, isLocked, itemMode, findConnectedGroup, getShapesByIds, getGroupCentroid, gridEnabled, snapVerticesToGrid, shapes]);
+  }, [pan, isRotating, rotatingButton, screenToWorld, findClosestEdge, calculateSnappedVertices, leftClickShape, rightClickShape, getFreeVertices, findShapeAtPoint, isLocked, itemMode, findConnectedGroup, getShapesByIds, getGroupCentroid, gridEnabled, snapVerticesToGrid, shapes, saveToHistory]);
 
   // Check if transformed group shapes overlap with any shapes outside the group
   const checkGroupOverlap = useCallback((transformedShapes, groupIds) => {
@@ -2771,7 +2845,10 @@ export default function App() {
           if (middleClickAction === 'delete') {
             // Delete shape
             const shape = findShapeAtPoint(px, py);
-            if (shape) setShapes(prev => prev.filter(s => s.id !== shape.id));
+            if (shape) {
+              saveToHistory();
+              setShapes(prev => prev.filter(s => s.id !== shape.id));
+            }
           } else {
             // Place shape (square, triangle, or corner)
             const { edge, distance } = findClosestEdge(px, py);
@@ -2788,6 +2865,7 @@ export default function App() {
               verts = calculateSnappedVertices(edge, middleClickAction, px, py);
             }
             if (!checkOverlap(verts, middleClickAction)) {
+              saveToHistory();
               setShapes(prev => [...prev, verticesToShape(verts, middleClickAction, Date.now(), buildingType)]);
             }
           }
@@ -2830,11 +2908,28 @@ export default function App() {
         transformedShapes = snapGroupBoundingBoxToGrid(transformedShapes);
       }
 
-      // Check if new positions are valid (no overlap with non-group shapes)
-      const hasOverlap = checkGroupOverlap(transformedShapes, draggedGroupIds);
+      // Save pre-snap position in case snap causes overlap
+      const preSnapShapes = transformedShapes.map(s => ({
+        ...s,
+        newVerts: s.newVerts.map(v => ({ ...v }))
+      }));
+
+      // Apply edge snapping for dragging (snap to external shape vertices)
+      if (isDraggingGroup) {
+        transformedShapes = snapGroupToEdges(transformedShapes, draggedGroupIds);
+      }
+
+      // Check if snapped position causes overlap - if so, revert to pre-snap position
+      let hasOverlap = checkGroupOverlap(transformedShapes, draggedGroupIds);
+      if (hasOverlap && isDraggingGroup) {
+        // Snap caused overlap, try without snap
+        transformedShapes = preSnapShapes;
+        hasOverlap = checkGroupOverlap(transformedShapes, draggedGroupIds);
+      }
 
       if (!hasOverlap) {
-        // Apply the transformation
+        // Apply the transformation (use lock mode history)
+        saveToHistory();
         setShapes(prev => prev.map(shape => {
           if (!draggedGroupIds.includes(shape.id)) return shape;
 
@@ -2873,6 +2968,7 @@ export default function App() {
       if (releasedButton === rotatingButton) {
         const rotatedVerts = rotateVertices(baseVertices, rotationAngle);
         if (!checkOverlap(rotatedVerts, rotationShapeType)) {
+          saveToHistory();
           setShapes(prev => [...prev, verticesToShape(rotatedVerts, rotationShapeType, Date.now(), buildingType)]);
         }
       }
@@ -2882,15 +2978,11 @@ export default function App() {
       setRotationAngle(0);
       setIsFreePlacement(false);
     }
-  }, [isRotating, rotatingButton, baseVertices, rotationAngle, rotationShapeType, rotateVertices, checkOverlap, verticesToShape, middleMouseStart, middleClickAction, screenToWorld, findShapeAtPoint, buildingType, isLocked, isDraggingGroup, isRotatingGroup, draggedGroupIds, dragOffset, groupRotationAngle, groupRotationCenter, getShapesByIds, getVertices, offsetVertices, rotateVertsAroundPoint, checkGroupOverlap, findClosestEdge, getFreeVertices, calculateSnappedVertices, gridEnabled, snapVerticesToGrid, snapGroupBoundingBoxToGrid, isDraggingPlacedItem]);
+  }, [isRotating, rotatingButton, baseVertices, rotationAngle, rotationShapeType, rotateVertices, checkOverlap, verticesToShape, middleMouseStart, middleClickAction, screenToWorld, findShapeAtPoint, buildingType, isLocked, isDraggingGroup, isRotatingGroup, draggedGroupIds, dragOffset, groupRotationAngle, groupRotationCenter, getShapesByIds, getVertices, offsetVertices, rotateVertsAroundPoint, checkGroupOverlap, findClosestEdge, getFreeVertices, calculateSnappedVertices, gridEnabled, snapVerticesToGrid, snapGroupBoundingBoxToGrid, snapGroupToEdges, isDraggingPlacedItem, saveToHistory]);
 
   const handleClear = () => {
-    // Save current state to history before clearing (if there are shapes/items on any floor)
-    const hasAnyShapes = Object.values(allFloorShapes).some(s => s.length > 0);
-    const hasAnyItems = Object.values(allFloorItems).some(i => i.length > 0);
-    if (hasAnyShapes || hasAnyItems) {
-      setShapesHistory(prev => [...prev.slice(-19), { shapes: allFloorShapes, items: allFloorItems }]); // Keep last 20 states max
-    }
+    // Save current state to history before clearing
+    saveToHistory();
     // Clear all floors
     setAllFloorShapes({ 0: [] });
     setAllFloorItems({ 0: [] });
@@ -2903,6 +2995,7 @@ export default function App() {
     setSelectedItemId(null);
   };
   const handleResetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
+
 
   // =====================================================
   // STAKE HANDLERS
@@ -3722,9 +3815,10 @@ export default function App() {
       y,
     };
 
+    saveToHistory();
     setPlacedItems(prev => [...prev, newItem]);
     setDraggingItem(null);
-  }, [draggingItem, pan, zoom, fiefMode, isItemInBuildableArea, doesItemOverlap]);
+  }, [draggingItem, pan, zoom, fiefMode, isItemInBuildableArea, doesItemOverlap, saveToHistory]);
 
   // Handle pattern drop from saved patterns panel
   const handlePatternDrop = useCallback((e) => {
@@ -3740,16 +3834,20 @@ export default function App() {
 
   // Handle item deletion
   const handleItemDelete = useCallback((itemId) => {
+    saveToHistory();
     setPlacedItems(prev => prev.filter(item => item.id !== itemId));
     if (selectedItemId === itemId) {
       setSelectedItemId(null);
     }
-  }, [selectedItemId]);
+  }, [selectedItemId, saveToHistory]);
 
   // Handle placed item mouse down (for selection and dragging in item mode)
   const handlePlacedItemMouseDown = useCallback((e, item) => {
     if (!itemMode) return;
     e.stopPropagation();
+
+    // Save history before moving item
+    saveToHistory();
 
     // Select the item
     setSelectedItemId(item.id);
@@ -3764,7 +3862,7 @@ export default function App() {
       y: mouseY - item.y,
     });
     setIsDraggingPlacedItem(true);
-  }, [itemMode, pan, zoom]);
+  }, [itemMode, pan, zoom, saveToHistory]);
 
   // Render placed items on canvas
   const renderPlacedItems = () => {
@@ -3835,17 +3933,38 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-slate-900 to-slate-950 p-4 flex flex-col items-center">
-      <div className="mb-4 text-center">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
-          Dune: Awakening Base Planner
-        </h1>
-        <p className="text-slate-400 text-base">A <a href="https://www.holidyspice.com" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 underline">Holidy Spice</a> Community Tool</p>
+    <div className={`min-h-screen bg-gradient-to-b from-slate-900 to-slate-950 p-4 flex flex-col items-center ${isWideMode ? 'px-2' : ''}`}>
+      <div className="mb-4 text-center w-full relative">
+        <div className="flex items-center justify-center gap-3">
+          <img src="/logo.png" alt="Logo" className="w-[95px] h-14" />
+          <div>
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-amber-400 to-orange-500 bg-clip-text text-transparent">
+              Dune: Awakening Base Planner
+            </h1>
+            <p className="text-slate-400 text-base">A <a href="https://www.holidyspice.com" target="_blank" rel="noopener noreferrer" className="text-amber-400 hover:text-amber-300 underline">Holidy Spice</a> Community Tool</p>
+          </div>
+        </div>
+        {/* Wide mode toggle */}
+        <button
+          onClick={() => setIsWideMode(!isWideMode)}
+          className="absolute top-0 right-0 bg-slate-700/80 hover:bg-slate-600 text-slate-300 hover:text-white p-2 rounded-lg transition-colors"
+          title={isWideMode ? 'Exit wide mode' : 'Expand horizontally'}
+        >
+          {isWideMode ? (
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l-6 7 6 7M15 5l6 7-6 7" />
+            </svg>
+          ) : (
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 5l6 7-6 7M21 5l-6 7 6 7" />
+            </svg>
+          )}
+        </button>
       </div>
 
       {/* Controls row: mouse assignments, clear, reset view, zoom */}
       {/* ml-[96px] offsets to align with canvas (sidebar 192px + gap 16px = 208px, centered adjustment) */}
-      <div className="flex flex-wrap items-center justify-center gap-2 mb-3 ml-[96px]" style={{ width: '900px' }}>
+      <div className={`flex flex-wrap items-center justify-center gap-2 mb-3 ${isWideMode ? 'w-full px-48' : 'ml-[96px]'}`} style={isWideMode ? {} : { width: '900px' }}>
         {/* Unified controls panel */}
         <div className="bg-slate-800 px-3 py-1.5 rounded-lg flex items-center gap-3">
           {/* Mouse button assignments */}
@@ -4032,7 +4151,7 @@ export default function App() {
       </div>
 
       {/* Main content area */}
-      <div className="flex">
+      <div className={`flex ${isWideMode ? 'w-full' : ''}`}>
         {/* Left Sidebar - Building Type & Fief Controls */}
         <div className="bg-slate-800 rounded-l-xl border-2 border-r-0 border-slate-700 w-48 p-4 flex-shrink-0">
           {/* Building Type */}
@@ -4213,10 +4332,10 @@ export default function App() {
         </div>
 
         {/* Canvas */}
-        <div className={`bg-slate-800 shadow-2xl overflow-hidden border-y-2 border-slate-700 ${itemSidebarOpen ? '' : 'border-r-2 rounded-r-xl'}`} style={{ minHeight: '600px' }}>
+        <div className={`bg-slate-800 shadow-2xl overflow-hidden border-y-2 border-slate-700 ${itemSidebarOpen ? '' : 'border-r-2 rounded-r-xl'} ${isWideMode ? 'flex-1' : ''}`} style={{ height: '680px' }}>
         <svg
-          width="900" height="100%"
-          viewBox="0 0 900 600"
+          width={isWideMode ? "100%" : "900"} height="680"
+          viewBox={isWideMode ? "-300 0 1500 680" : "0 0 900 680"}
           preserveAspectRatio="xMidYMin meet"
           onContextMenu={(e) => e.preventDefault()}
           onMouseDown={handleMouseDown}
@@ -4351,7 +4470,7 @@ export default function App() {
             {/* Clear Items button */}
             {placedItems.length > 0 && (
               <button
-                onClick={() => setPlacedItems([])}
+                onClick={() => { saveToHistory(); setPlacedItems([]); }}
                 className="w-full bg-red-600/80 hover:bg-red-500 text-white text-sm py-1.5 rounded-lg transition-colors flex items-center justify-center gap-2 mt-3"
                 title="Clear all items on this floor"
               >
@@ -4364,6 +4483,128 @@ export default function App() {
           </div>
         )}
       </div>
+
+      {/* Saved Patterns Panel - visible only in lock mode, right under canvas */}
+      {isLocked && (
+        <div className={`mt-3 ${isWideMode ? 'w-full px-48' : 'ml-[96px]'}`} style={isWideMode ? {} : { width: '900px' }}>
+          <div className="bg-slate-800 rounded-xl border-2 border-slate-700 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-amber-400 font-bold text-lg">Saved Patterns</h3>
+              <span className="text-slate-500 text-xs">Right-click a group to save · Drag to place</span>
+            </div>
+            {savedPatterns.length === 0 ? (
+              <div className="text-slate-500 text-sm py-4 text-center">
+                No patterns saved. Right-click on a connected group to save it as a pattern.
+              </div>
+            ) : (
+              <div className="flex gap-3 overflow-x-auto custom-scrollbar pb-2">
+                {savedPatterns.map(pattern => {
+                  // Calculate bounds of pattern shapes for thumbnail sizing
+                  const minX = Math.min(...pattern.shapes.map(s => s.relX)) - SHAPE_SIZE/2;
+                  const maxX = Math.max(...pattern.shapes.map(s => s.relX)) + SHAPE_SIZE/2;
+                  const minY = Math.min(...pattern.shapes.map(s => s.relY)) - SHAPE_SIZE/2;
+                  const maxY = Math.max(...pattern.shapes.map(s => s.relY)) + SHAPE_SIZE/2;
+                  const width = maxX - minX;
+                  const height = maxY - minY;
+                  const scale = Math.min(60 / width, 60 / height, 1);
+                  const offsetX = (70 - width * scale) / 2 - minX * scale;
+                  const offsetY = (70 - height * scale) / 2 - minY * scale;
+
+                  return (
+                    <div
+                      key={pattern.id}
+                      className="relative flex-shrink-0 cursor-grab active:cursor-grabbing group"
+                      draggable
+                      onDragStart={(e) => {
+                        setDraggingPattern(pattern);
+                        e.dataTransfer.effectAllowed = 'copy';
+                      }}
+                      onDragEnd={() => setDraggingPattern(null)}
+                    >
+                      <div className="w-[80px] h-[90px] bg-slate-700 rounded-lg border border-slate-600 hover:border-amber-500 transition-colors p-1 flex flex-col">
+                        <svg width="70" height="70" className="flex-shrink-0">
+                          <g transform={`translate(${offsetX}, ${offsetY}) scale(${scale})`}>
+                            {pattern.shapes.map((ps, i) => {
+                              // Preview always uses current building type colors
+                              const colors = COLOR_SCHEMES[buildingType] || COLOR_SCHEMES.atreides;
+                              const shapeColors = colors[ps.type] || colors.square;
+
+                              // Use saved localVerts if available, otherwise calculate from rotation
+                              let corners;
+                              if (ps.localVerts) {
+                                // localVerts are relative to shape center, add relX/relY to position
+                                corners = ps.localVerts.map(v => ({
+                                  x: ps.relX + v.x,
+                                  y: ps.relY + v.y,
+                                }));
+                              } else {
+                                // Fallback for old patterns
+                                const h = SHAPE_SIZE / 2;
+                                const rad = (ps.rotation * Math.PI) / 180;
+                                const cos = Math.cos(rad);
+                                const sin = Math.sin(rad);
+                                let localVerts;
+
+                                if (ps.type === 'square' || ps.type === 'stair') {
+                                  localVerts = [
+                                    { x: -h, y: -h }, { x: h, y: -h },
+                                    { x: h, y: h }, { x: -h, y: h },
+                                  ];
+                                } else if (ps.type === 'corner') {
+                                  localVerts = [
+                                    { x: -h, y: -h }, { x: h, y: -h }, { x: -h, y: h },
+                                  ];
+                                } else {
+                                  const apexY = -TRI_HEIGHT * 2 / 3;
+                                  const baseY = TRI_HEIGHT / 3;
+                                  localVerts = [
+                                    { x: 0, y: apexY },
+                                    { x: h, y: baseY },
+                                    { x: -h, y: baseY },
+                                  ];
+                                }
+
+                                corners = localVerts.map(c => ({
+                                  x: ps.relX + c.x * cos - c.y * sin,
+                                  y: ps.relY + c.x * sin + c.y * cos,
+                                }));
+                              }
+
+                              return (
+                                <polygon
+                                  key={i}
+                                  points={corners.map(c => `${c.x},${c.y}`).join(' ')}
+                                  fill={shapeColors.fill}
+                                  stroke={shapeColors.stroke}
+                                  strokeWidth="2"
+                                />
+                              );
+                            })}
+                          </g>
+                        </svg>
+                        <div className="text-[10px] text-slate-400 text-center truncate px-1" title={pattern.name}>
+                          {pattern.name}
+                        </div>
+                      </div>
+                      {/* Delete button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deletePattern(pattern.id);
+                        }}
+                        className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 hover:bg-red-500 text-white rounded-full text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
+                        title="Delete pattern"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Instructions bar with stats and Share/Discord */}
       <div className="mt-3 bg-slate-800/50 px-4 py-2 rounded-lg ml-[96px]" style={{ width: '900px' }}>
@@ -4494,128 +4735,6 @@ export default function App() {
           )}
         </div>
       </div>
-
-      {/* Saved Patterns Panel - visible only in lock mode */}
-      {isLocked && (
-        <div className="mt-3 ml-[96px]" style={{ width: '900px' }}>
-          <div className="bg-slate-800 rounded-lg border-2 border-slate-700 p-3">
-            <div className="flex items-center justify-between mb-2">
-              <h3 className="text-slate-300 font-medium text-sm">Saved Patterns</h3>
-              <span className="text-slate-500 text-xs">Right-click a group to save · Drag to place</span>
-            </div>
-            {savedPatterns.length === 0 ? (
-              <div className="text-slate-500 text-sm py-4 text-center">
-                No patterns saved. Right-click on a connected group to save it as a pattern.
-              </div>
-            ) : (
-              <div className="flex gap-3 overflow-x-auto custom-scrollbar pb-2">
-                {savedPatterns.map(pattern => {
-                  // Calculate bounds of pattern shapes for thumbnail sizing
-                  const minX = Math.min(...pattern.shapes.map(s => s.relX)) - SHAPE_SIZE/2;
-                  const maxX = Math.max(...pattern.shapes.map(s => s.relX)) + SHAPE_SIZE/2;
-                  const minY = Math.min(...pattern.shapes.map(s => s.relY)) - SHAPE_SIZE/2;
-                  const maxY = Math.max(...pattern.shapes.map(s => s.relY)) + SHAPE_SIZE/2;
-                  const width = maxX - minX;
-                  const height = maxY - minY;
-                  const scale = Math.min(60 / width, 60 / height, 1);
-                  const offsetX = (70 - width * scale) / 2 - minX * scale;
-                  const offsetY = (70 - height * scale) / 2 - minY * scale;
-
-                  return (
-                    <div
-                      key={pattern.id}
-                      className="relative flex-shrink-0 cursor-grab active:cursor-grabbing group"
-                      draggable
-                      onDragStart={(e) => {
-                        setDraggingPattern(pattern);
-                        e.dataTransfer.effectAllowed = 'copy';
-                      }}
-                      onDragEnd={() => setDraggingPattern(null)}
-                    >
-                      <div className="w-[80px] h-[90px] bg-slate-700 rounded-lg border border-slate-600 hover:border-amber-500 transition-colors p-1 flex flex-col">
-                        <svg width="70" height="70" className="flex-shrink-0">
-                          <g transform={`translate(${offsetX}, ${offsetY}) scale(${scale})`}>
-                            {pattern.shapes.map((ps, i) => {
-                              // Preview always uses current building type colors
-                              const colors = COLOR_SCHEMES[buildingType] || COLOR_SCHEMES.atreides;
-                              const shapeColors = colors[ps.type] || colors.square;
-
-                              // Use saved localVerts if available, otherwise calculate from rotation
-                              let corners;
-                              if (ps.localVerts) {
-                                // localVerts are relative to shape center, add relX/relY to position
-                                corners = ps.localVerts.map(v => ({
-                                  x: ps.relX + v.x,
-                                  y: ps.relY + v.y,
-                                }));
-                              } else {
-                                // Fallback for old patterns
-                                const h = SHAPE_SIZE / 2;
-                                const rad = (ps.rotation * Math.PI) / 180;
-                                const cos = Math.cos(rad);
-                                const sin = Math.sin(rad);
-                                let localVerts;
-
-                                if (ps.type === 'square' || ps.type === 'stair') {
-                                  localVerts = [
-                                    { x: -h, y: -h }, { x: h, y: -h },
-                                    { x: h, y: h }, { x: -h, y: h },
-                                  ];
-                                } else if (ps.type === 'corner') {
-                                  localVerts = [
-                                    { x: -h, y: -h }, { x: h, y: -h }, { x: -h, y: h },
-                                  ];
-                                } else {
-                                  const apexY = -TRI_HEIGHT * 2 / 3;
-                                  const baseY = TRI_HEIGHT / 3;
-                                  localVerts = [
-                                    { x: 0, y: apexY },
-                                    { x: h, y: baseY },
-                                    { x: -h, y: baseY },
-                                  ];
-                                }
-
-                                corners = localVerts.map(c => ({
-                                  x: ps.relX + c.x * cos - c.y * sin,
-                                  y: ps.relY + c.x * sin + c.y * cos,
-                                }));
-                              }
-
-                              return (
-                                <polygon
-                                  key={i}
-                                  points={corners.map(c => `${c.x},${c.y}`).join(' ')}
-                                  fill={shapeColors.fill}
-                                  stroke={shapeColors.stroke}
-                                  strokeWidth="2"
-                                />
-                              );
-                            })}
-                          </g>
-                        </svg>
-                        <div className="text-[10px] text-slate-400 text-center truncate px-1" title={pattern.name}>
-                          {pattern.name}
-                        </div>
-                      </div>
-                      {/* Delete button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deletePattern(pattern.id);
-                        }}
-                        className="absolute -top-1 -right-1 w-5 h-5 bg-red-600 hover:bg-red-500 text-white rounded-full text-xs font-bold opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"
-                        title="Delete pattern"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Toast Notifications */}
       <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
