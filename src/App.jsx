@@ -1135,7 +1135,7 @@ export default function App() {
                 _verts: verts,
               };
             });
-            setShapes(expandedShapes);
+            setAllFloorShapes({ 0: expandedShapes });
 
             // Restore other settings (handle both numeric codes and char codes)
             if (state.b !== undefined) {
@@ -1179,14 +1179,14 @@ export default function App() {
                 x: item[1],
                 y: item[2],
               }));
-              setPlacedItems(expandedItems);
+              setAllFloorItems({ 0: expandedItems });
             }
           } else if (state.s && state.s.length === 0) {
             // Empty design
-            setShapes([]);
+            setAllFloorShapes({ 0: [] });
           } else {
             // Old format - direct mapping
-            if (state.shapes) setShapes(state.shapes);
+            if (state.shapes) setAllFloorShapes({ 0: state.shapes });
             if (state.buildingType) setBuildingType(state.buildingType);
             if (state.leftClickShape) setLeftClickShape(state.leftClickShape);
             if (state.rightClickShape) setRightClickShape(state.rightClickShape);
@@ -1198,7 +1198,7 @@ export default function App() {
             if (state.fiefPadding !== undefined) setFiefPadding(state.fiefPadding);
             if (state.stakesInventory !== undefined) setStakesInventory(state.stakesInventory);
             if (state.claimedAreas) setClaimedAreas(state.claimedAreas);
-            if (state.placedItems) setPlacedItems(state.placedItems);
+            if (state.placedItems) setAllFloorItems({ 0: state.placedItems });
           }
 
           // Clear URL after loading
