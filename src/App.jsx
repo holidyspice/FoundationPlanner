@@ -4332,9 +4332,9 @@ export default function App() {
         </div>
 
         {/* Canvas */}
-        <div className={`bg-slate-800 shadow-2xl overflow-hidden border-y-2 border-slate-700 ${itemSidebarOpen ? '' : 'border-r-2 rounded-r-xl'} ${isWideMode ? 'flex-1' : ''}`} style={{ height: '680px' }}>
+        <div className={`bg-slate-800 shadow-2xl overflow-hidden border-y-2 border-slate-700 ${itemSidebarOpen ? '' : 'border-r-2 rounded-r-xl'} ${isWideMode ? 'flex-1' : ''} flex flex-col`} style={{ minHeight: '680px' }}>
         <svg
-          width={isWideMode ? "100%" : "900"} height="680"
+          width={isWideMode ? "100%" : "900"} height="100%" style={{ minHeight: '680px' }}
           viewBox={isWideMode ? "-300 0 1500 680" : "0 0 900 680"}
           preserveAspectRatio="xMidYMin meet"
           onContextMenu={(e) => e.preventDefault()}
