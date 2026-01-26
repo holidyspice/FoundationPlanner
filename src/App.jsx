@@ -2359,12 +2359,9 @@ export default function App() {
     }));
   }, []);
 
-  // Snap angle to nearest increment based on shape type
-  const snapAngle = useCallback((angle, shapeType) => {
-    // Triangles: 60° increments (6 orientations)
-    // Squares/Corners/Stairs: 90° increments (4 orientations)
-    const increment = shapeType === 'triangle' ? 60 : 90;
-    return Math.round(angle / increment) * increment;
+  // Snap angle to nearest degree for clean rotation
+  const snapAngle = useCallback((angle) => {
+    return Math.round(angle);
   }, []);
 
   const verticesToShape = useCallback((verts, shapeType, id, building) => {
@@ -2605,11 +2602,11 @@ export default function App() {
     }
 
     // Handle rotation mode - update angle based on horizontal drag with angular snapping
-    if (isRotating && baseVertices && rotationShapeType) {
+    if (isRotating && baseVertices) {
       const deltaX = screenX - rotationStartX;
       const rawAngle = deltaX * 0.5; // 0.5 degrees per pixel
-      // Snap angle to increments: 60° for triangles, 90° for others
-      const snappedAngle = snapAngle(rawAngle, rotationShapeType);
+      // Snap to nearest degree for clean rotation values
+      const snappedAngle = snapAngle(rawAngle);
       setRotationAngle(snappedAngle);
       return;
     }
@@ -2640,7 +2637,7 @@ export default function App() {
       rightVerts = calculateSnappedVertices(edge, rightClickShape, px, py);
       setHoverInfo({ freePlace: false, edge, leftVerts, rightVerts });
     }
-  }, [findClosestEdge, calculateSnappedVertices, screenToWorld, isPanning, panStart, isRotating, baseVertices, rotationStartX, rotationShapeType, snapAngle, leftClickShape, rightClickShape, getFreeVertices, isLocked, isDraggingGroup, isRotatingGroup, dragStart, findShapeAtPoint, findConnectedGroup, gridEnabled, snapVerticesToGrid, itemMode, isDraggingPlacedItem, selectedItemId, pan, zoom, itemDragOffset, placedItems, fiefMode, isItemInBuildableArea, doesItemOverlap, shapes]);
+  }, [findClosestEdge, calculateSnappedVertices, screenToWorld, isPanning, panStart, isRotating, baseVertices, rotationStartX, snapAngle, leftClickShape, rightClickShape, getFreeVertices, isLocked, isDraggingGroup, isRotatingGroup, dragStart, findShapeAtPoint, findConnectedGroup, gridEnabled, snapVerticesToGrid, itemMode, isDraggingPlacedItem, selectedItemId, pan, zoom, itemDragOffset, placedItems, fiefMode, isItemInBuildableArea, doesItemOverlap, shapes]);
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();
@@ -4850,7 +4847,7 @@ export default function App() {
                   </div>
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
                     <span className="text-slate-300">Free place + rotate</span>
-                    <span className="text-slate-400 text-xs">Hold + drag (snaps 60°/90°)</span>
+                    <span className="text-slate-400 text-xs">Hold + drag</span>
                   </div>
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
                     <span className="text-slate-300">Set left-click shape</span>
