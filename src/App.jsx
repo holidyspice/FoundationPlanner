@@ -2359,6 +2359,14 @@ export default function App() {
     }));
   }, []);
 
+  // Snap angle to nearest increment based on shape type
+  const snapAngle = useCallback((angle, shapeType) => {
+    // Triangles: 60° increments (6 orientations)
+    // Squares/Corners/Stairs: 90° increments (4 orientations)
+    const increment = shapeType === 'triangle' ? 60 : 90;
+    return Math.round(angle / increment) * increment;
+  }, []);
+
   const verticesToShape = useCallback((verts, shapeType, id, building) => {
     const cx = verts.reduce((s, v) => s + v.x, 0) / verts.length;
     const cy = verts.reduce((s, v) => s + v.y, 0) / verts.length;
@@ -2596,11 +2604,13 @@ export default function App() {
       return;
     }
 
-    // Handle rotation mode - update angle based on horizontal drag
-    if (isRotating && baseVertices) {
+    // Handle rotation mode - update angle based on horizontal drag with angular snapping
+    if (isRotating && baseVertices && rotationShapeType) {
       const deltaX = screenX - rotationStartX;
-      const newAngle = deltaX * 0.5; // 0.5 degrees per pixel
-      setRotationAngle(newAngle);
+      const rawAngle = deltaX * 0.5; // 0.5 degrees per pixel
+      // Snap angle to increments: 60° for triangles, 90° for others
+      const snappedAngle = snapAngle(rawAngle, rotationShapeType);
+      setRotationAngle(snappedAngle);
       return;
     }
 
@@ -2630,7 +2640,7 @@ export default function App() {
       rightVerts = calculateSnappedVertices(edge, rightClickShape, px, py);
       setHoverInfo({ freePlace: false, edge, leftVerts, rightVerts });
     }
-  }, [findClosestEdge, calculateSnappedVertices, screenToWorld, isPanning, panStart, isRotating, baseVertices, rotationStartX, leftClickShape, rightClickShape, getFreeVertices, isLocked, isDraggingGroup, isRotatingGroup, dragStart, findShapeAtPoint, findConnectedGroup, gridEnabled, snapVerticesToGrid, itemMode, isDraggingPlacedItem, selectedItemId, pan, zoom, itemDragOffset, placedItems, fiefMode, isItemInBuildableArea, doesItemOverlap, shapes]);
+  }, [findClosestEdge, calculateSnappedVertices, screenToWorld, isPanning, panStart, isRotating, baseVertices, rotationStartX, rotationShapeType, snapAngle, leftClickShape, rightClickShape, getFreeVertices, isLocked, isDraggingGroup, isRotatingGroup, dragStart, findShapeAtPoint, findConnectedGroup, gridEnabled, snapVerticesToGrid, itemMode, isDraggingPlacedItem, selectedItemId, pan, zoom, itemDragOffset, placedItems, fiefMode, isItemInBuildableArea, doesItemOverlap, shapes]);
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();
@@ -2751,32 +2761,35 @@ export default function App() {
         return;
       }
 
-      // Otherwise, start rotation mode for placing shapes
+      // Check if near an edge for snapping
       const { edge, distance } = findClosestEdge(px, py);
-
-      let verts;
       const isFree = !edge || distance > SNAP_THRESHOLD;
+
       if (isFree) {
-        verts = getFreeVertices(px, py, shapeType);
+        // Free placement: enter rotation mode for manual rotation with angular snapping
+        let verts = getFreeVertices(px, py, shapeType);
         // Apply grid snap for free placements (always snap first shape)
         const isFirstShape = shapes.length === 0;
         if (gridEnabled || isFirstShape) {
           verts = snapVerticesToGrid(verts, isFirstShape);
         }
+        setIsRotating(true);
+        setRotatingButton(e.button === 0 ? 'left' : 'right');
+        setRotationStartX(screenX);
+        setRotationAngle(0);
+        setBaseVertices(verts);
+        setRotationShapeType(shapeType);
+        setIsFreePlacement(true);
       } else {
-        // Edge snap takes priority
-        verts = calculateSnappedVertices(edge, shapeType, px, py);
+        // Edge-snapped placement: place immediately without rotation
+        const verts = calculateSnappedVertices(edge, shapeType, px, py);
+        if (!checkOverlap(verts, shapeType)) {
+          saveToHistory();
+          setShapes(prev => [...prev, verticesToShape(verts, shapeType, Date.now(), buildingType)]);
+        }
       }
-
-      setIsRotating(true);
-      setRotatingButton(e.button === 0 ? 'left' : 'right');
-      setRotationStartX(screenX);
-      setRotationAngle(0);
-      setBaseVertices(verts);
-      setRotationShapeType(shapeType);
-      setIsFreePlacement(isFree);
     }
-  }, [pan, isRotating, rotatingButton, screenToWorld, findClosestEdge, calculateSnappedVertices, leftClickShape, rightClickShape, getFreeVertices, findShapeAtPoint, isLocked, itemMode, findConnectedGroup, getShapesByIds, getGroupCentroid, gridEnabled, snapVerticesToGrid, shapes, saveToHistory]);
+  }, [pan, isRotating, rotatingButton, screenToWorld, findClosestEdge, calculateSnappedVertices, leftClickShape, rightClickShape, getFreeVertices, findShapeAtPoint, isLocked, itemMode, findConnectedGroup, getShapesByIds, getGroupCentroid, gridEnabled, snapVerticesToGrid, shapes, saveToHistory, checkOverlap, verticesToShape, buildingType]);
 
   // Check if transformed group shapes overlap with any shapes outside the group
   const checkGroupOverlap = useCallback((transformedShapes, groupIds) => {
@@ -4727,6 +4740,7 @@ export default function App() {
           ) : (
             <p className="text-slate-400 text-sm text-center">
               <span className="text-blue-400 font-medium">Design:</span>
+              <span className="ml-2">Click edge</span> to snap ·
               <span className="ml-2">Hold+drag</span> to rotate ·
               <span className="ml-2">1-5</span> to change shape ·
               <span className="ml-2">Scroll</span> to zoom
@@ -4831,12 +4845,12 @@ export default function App() {
                 <p className="text-slate-500 text-xs mb-2">Place foundation shapes on the canvas</p>
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Place with rotation</span>
-                    <span className="text-slate-400 text-xs">Hold click + drag</span>
+                    <span className="text-slate-300">Snap to edge</span>
+                    <span className="text-slate-400 text-xs">Click near edge</span>
                   </div>
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
-                    <span className="text-slate-300">Place without rotation</span>
-                    <span className="text-slate-400 text-xs">Click or middle-click</span>
+                    <span className="text-slate-300">Free place + rotate</span>
+                    <span className="text-slate-400 text-xs">Hold + drag (snaps 60°/90°)</span>
                   </div>
                   <div className="flex justify-between bg-slate-700/50 px-3 py-1.5 rounded">
                     <span className="text-slate-300">Set left-click shape</span>
