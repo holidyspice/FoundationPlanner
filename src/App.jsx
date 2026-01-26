@@ -2435,19 +2435,13 @@ export default function App() {
 
       // Check for nearly coincident shapes (same position)
       // This catches the case where shapes overlap exactly and vertices lie on edges
+      // Only trigger for truly overlapping shapes (centroids nearly identical), not edge-sharing
       const existingCx = existingVerts.reduce((s, v) => s + v.x, 0) / existingVerts.length;
       const existingCy = existingVerts.reduce((s, v) => s + v.y, 0) / existingVerts.length;
       const centroidDist = Math.hypot(newCx - existingCx, newCy - existingCy);
-      if (centroidDist < SHAPE_SIZE * 0.5) {
-        // Centroids are close - check if any vertices are nearly coincident
-        const existingBaseVerts = shape._verts || getVertices(shape);
-        for (const nv of newVerts) {
-          for (const ev of existingBaseVerts) {
-            if (Math.hypot(nv.x - ev.x, nv.y - ev.y) < EDGE_TOLERANCE * 2) {
-              return true; // Vertices nearly coincident = overlapping shape
-            }
-          }
-        }
+      if (centroidDist < EDGE_TOLERANCE * 3) {
+        // Centroids are nearly identical - this is a duplicate placement
+        return true;
       }
 
       // Check if any new vertex is strictly inside existing shape
@@ -2810,19 +2804,13 @@ export default function App() {
           }
         }
 
-        // Check for coincident shapes
+        // Check for coincident shapes (centroids nearly identical = duplicate)
         const newCx = newVerts.reduce((s, v) => s + v.x, 0) / newVerts.length;
         const newCy = newVerts.reduce((s, v) => s + v.y, 0) / newVerts.length;
         const existingCx = existingVerts.reduce((s, v) => s + v.x, 0) / existingVerts.length;
         const existingCy = existingVerts.reduce((s, v) => s + v.y, 0) / existingVerts.length;
-        if (Math.hypot(newCx - existingCx, newCy - existingCy) < SHAPE_SIZE * 0.5) {
-          for (const nv of newVerts) {
-            for (const ev of (other._verts || [])) {
-              if (Math.hypot(nv.x - ev.x, nv.y - ev.y) < EDGE_TOLERANCE * 2) {
-                return true;
-              }
-            }
-          }
+        if (Math.hypot(newCx - existingCx, newCy - existingCy) < EDGE_TOLERANCE * 3) {
+          return true;
         }
       }
     }
