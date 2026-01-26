@@ -1317,10 +1317,18 @@ export default function App() {
     setUrlTooLong(url.length > 2048);
   }, [generateShareUrl]);
 
-  // Update fief dimensions when type changes
+  // Update fief dimensions when type changes, reset stakes for standard fief
   useEffect(() => {
     setFiefWidth(FIEF_DEFAULTS[fiefType].width);
     setFiefHeight(FIEF_DEFAULTS[fiefType].height);
+    // Reset stakes when switching to standard (no expansions allowed)
+    if (fiefType === 'standard') {
+      setStakesInventory(MAX_STAKES);
+      setPlacedStakes([]);
+      setClaimedAreas([]);
+      setDraggingStake(null);
+      setStakeDropZone(null);
+    }
   }, [fiefType]);
 
   // Reset stakes when fief mode is disabled
@@ -1615,9 +1623,9 @@ export default function App() {
     return false; // No overlap
   }, [placedItems]);
 
-  // Get available drop zones for stakes
+  // Get available drop zones for stakes (only for advanced fiefs)
   const getStakeDropZones = useCallback(() => {
-    if (!fiefMode) return [];
+    if (!fiefMode || fiefType === 'standard') return [];
 
     const { areas, areaMap } = getBuildableAreas();
     const dropZones = [];
@@ -1668,7 +1676,7 @@ export default function App() {
     }
 
     return dropZones;
-  }, [fiefMode, getBuildableAreas, placedStakes, fiefWidth, fiefHeight]);
+  }, [fiefMode, fiefType, getBuildableAreas, placedStakes, fiefWidth, fiefHeight]);
 
   // =====================================================
   // COLLISION POLYGON FOR CORNERS
@@ -4262,57 +4270,61 @@ export default function App() {
                 <p className="text-slate-500 text-[10px]">Expands buildable area beyond fief boundary</p>
               </div>
 
-              {/* Stakes Section */}
-              <div className="border-t border-slate-600 pt-2 mt-3">
-                <div className="text-slate-300 font-medium text-sm mb-2">Stakes ({stakesInventory}/{MAX_STAKES})</div>
-                <div className="flex flex-wrap gap-2">
-                  {Array.from({ length: MAX_STAKES }).map((_, i) => {
-                    const isAvailable = i < stakesInventory;
-                    const usedIndex = i - stakesInventory;
-                    const claimedArea = !isAvailable ? claimedAreas[usedIndex] : null;
+              {/* Stakes Section - Only for Advanced Fiefs */}
+              {fiefType === 'advanced' && (
+                <>
+                  <div className="border-t border-slate-600 pt-2 mt-3">
+                    <div className="text-slate-300 font-medium text-sm mb-2">Stakes ({stakesInventory}/{MAX_STAKES})</div>
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from({ length: MAX_STAKES }).map((_, i) => {
+                        const isAvailable = i < stakesInventory;
+                        const usedIndex = i - stakesInventory;
+                        const claimedArea = !isAvailable ? claimedAreas[usedIndex] : null;
 
-                    if (isAvailable) {
-                      return (
-                        <div
-                          key={i}
-                          draggable
-                          onDragStart={handleStakeDragStart}
-                          onDragEnd={handleStakeDragEnd}
-                          className="w-10 h-10 rounded-lg flex items-center justify-center cursor-grab active:cursor-grabbing transition-all hover:scale-110"
-                          title="Drag to place stake"
-                        >
-                          <img src="/items/staking-unit.webp" alt="Stake" className="w-full h-full object-contain" />
-                        </div>
-                      );
-                    } else {
-                      return (
-                        <div
-                          key={i}
-                          onClick={() => {
-                            if (claimedArea) {
-                              setClaimedAreas(prev => prev.filter(a => a.id !== claimedArea.id));
-                              setStakesInventory(prev => prev + 1);
-                            }
-                          }}
-                          className="w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer transition-all hover:scale-110 opacity-40 grayscale"
-                          title="Click to remove this claim"
-                        >
-                          <img src="/items/staking-unit.webp" alt="Used Stake" className="w-full h-full object-contain" />
-                        </div>
-                      );
-                    }
-                  })}
-                </div>
-                <p className="text-slate-500 text-xs mt-2">
-                  Drag to place · Click gray to remove
-                </p>
-              </div>
+                        if (isAvailable) {
+                          return (
+                            <div
+                              key={i}
+                              draggable
+                              onDragStart={handleStakeDragStart}
+                              onDragEnd={handleStakeDragEnd}
+                              className="w-10 h-10 rounded-lg flex items-center justify-center cursor-grab active:cursor-grabbing transition-all hover:scale-110"
+                              title="Drag to place stake"
+                            >
+                              <img src="/items/staking-unit.webp" alt="Stake" className="w-full h-full object-contain" />
+                            </div>
+                          );
+                        } else {
+                          return (
+                            <div
+                              key={i}
+                              onClick={() => {
+                                if (claimedArea) {
+                                  setClaimedAreas(prev => prev.filter(a => a.id !== claimedArea.id));
+                                  setStakesInventory(prev => prev + 1);
+                                }
+                              }}
+                              className="w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer transition-all hover:scale-110 opacity-40 grayscale"
+                              title="Click to remove this claim"
+                            >
+                              <img src="/items/staking-unit.webp" alt="Used Stake" className="w-full h-full object-contain" />
+                            </div>
+                          );
+                        }
+                      })}
+                    </div>
+                    <p className="text-slate-500 text-xs mt-2">
+                      Drag to place · Click gray to remove
+                    </p>
+                  </div>
 
-              {/* Claimed Areas Count */}
-              {claimedAreas.length > 0 && (
-                <div className="text-xs text-slate-400 mt-2">
-                  Claimed areas: {claimedAreas.length + 1}
-                </div>
+                  {/* Claimed Areas Count */}
+                  {claimedAreas.length > 0 && (
+                    <div className="text-xs text-slate-400 mt-2">
+                      Claimed areas: {claimedAreas.length + 1}
+                    </div>
+                  )}
+                </>
               )}
             </>
           )}
