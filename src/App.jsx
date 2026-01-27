@@ -474,6 +474,7 @@ export default function App() {
   const [originalGroupPositions, setOriginalGroupPositions] = useState([]);
   const [clipboard, setClipboard] = useState(null); // Copied shapes for paste
   const mousePositionRef = useRef({ x: 0, y: 0 }); // Track mouse position for paste
+  const svgRef = useRef(null); // Ref for SVG element to attach non-passive wheel listener
 
   // Grid mode state
   const [gridEnabled, setGridEnabled] = useState(false);
@@ -2648,7 +2649,7 @@ export default function App() {
 
   const handleWheel = useCallback((e) => {
     e.preventDefault();
-    const rect = e.currentTarget.getBoundingClientRect();
+    const rect = e.target.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
@@ -2661,6 +2662,14 @@ export default function App() {
     setPan({ x: mouseX - worldX * newZoom, y: mouseY - worldY * newZoom });
     setZoom(newZoom);
   }, [zoom, pan]);
+
+  // Attach wheel listener with { passive: false } to allow preventDefault
+  useEffect(() => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    svg.addEventListener('wheel', handleWheel, { passive: false });
+    return () => svg.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
 
   const handleMouseDown = useCallback((e) => {
     // Middle mouse button - start panning (also track for click detection)
@@ -4350,6 +4359,7 @@ export default function App() {
         {/* Canvas */}
         <div className={`bg-slate-800 shadow-2xl overflow-hidden border-y-2 border-slate-700 ${itemSidebarOpen ? '' : 'border-r-2 rounded-r-xl'} ${isWideMode ? 'flex-1' : ''} flex flex-col`} style={{ minHeight: '680px' }}>
         <svg
+          ref={svgRef}
           width={isWideMode ? "100%" : "900"} height="100%" style={{ minHeight: '680px' }}
           viewBox={isWideMode ? "-300 0 1500 680" : "0 0 900 680"}
           preserveAspectRatio="xMidYMin meet"
@@ -4358,7 +4368,6 @@ export default function App() {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={() => { setHoverInfo(null); setIsPanning(false); setIsRotating(false); setBaseVertices(null); setRotationAngle(0); }}
-          onWheel={handleWheel}
           onDragOver={(e) => { e.preventDefault(); handleItemDragOver(e); }}
           onDrop={(e) => { handleItemDrop(e); handleFiefDrop(e); handlePatternDrop(e); }}
           className={isPanning ? "cursor-grabbing" : "cursor-crosshair"}
