@@ -2390,6 +2390,13 @@ export default function App() {
   // OVERLAP DETECTION
   // =====================================================
   const pointStrictlyInPolygon = useCallback((px, py, verts) => {
+    // Check if point is near any vertex (shared vertices are OK)
+    for (const v of verts) {
+      if (Math.hypot(px - v.x, py - v.y) < EDGE_TOLERANCE * 2) {
+        return false; // Near a vertex = not strictly inside (allows shared vertices)
+      }
+    }
+
     // Check if point is on any edge (within tolerance)
     for (let i = 0; i < verts.length; i++) {
       const v1 = verts[i];
