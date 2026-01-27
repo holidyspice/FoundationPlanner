@@ -2391,29 +2391,30 @@ export default function App() {
   // OVERLAP DETECTION
   // =====================================================
   const pointStrictlyInPolygon = useCallback((px, py, verts) => {
+    // Use a generous tolerance for boundary detection
+    const boundaryTolerance = EDGE_TOLERANCE * 3; // 6 units
+
     // Check if point is near any vertex (shared vertices are OK)
     for (const v of verts) {
-      if (Math.hypot(px - v.x, py - v.y) < EDGE_TOLERANCE * 2) {
+      if (Math.hypot(px - v.x, py - v.y) < boundaryTolerance) {
         return false; // Near a vertex = not strictly inside (allows shared vertices)
       }
     }
 
-    // Check if point is on any edge (within tolerance)
+    // Check if point is near any edge (within tolerance)
     for (let i = 0; i < verts.length; i++) {
       const v1 = verts[i];
       const v2 = verts[(i + 1) % verts.length];
       const dx = v2.x - v1.x, dy = v2.y - v1.y;
       const lenSq = dx * dx + dy * dy;
       if (lenSq > 0.001) {
-        const t = ((px - v1.x) * dx + (py - v1.y) * dy) / lenSq;
-        if (t >= -0.01 && t <= 1.01) {
-          const dist = Math.hypot(px - (v1.x + t * dx), py - (v1.y + t * dy));
-          if (dist < EDGE_TOLERANCE) return false; // On edge = not strictly inside
-        }
+        const t = Math.max(0, Math.min(1, ((px - v1.x) * dx + (py - v1.y) * dy) / lenSq));
+        const dist = Math.hypot(px - (v1.x + t * dx), py - (v1.y + t * dy));
+        if (dist < boundaryTolerance) return false; // Near edge = not strictly inside
       }
     }
 
-    // Ray casting for interior test
+    // Ray casting for interior test - only flag as inside if clearly in the interior
     let inside = false;
     for (let i = 0, j = verts.length - 1; i < verts.length; j = i++) {
       const xi = verts[i].x, yi = verts[i].y;
@@ -2426,10 +2427,19 @@ export default function App() {
   }, []);
 
   const segmentsIntersect = useCallback((a1, a2, b1, b2) => {
+    // First check if segments share an endpoint (common at shape junctions)
+    const shareEndpoint = (
+      (Math.hypot(a1.x - b1.x, a1.y - b1.y) < 1) ||
+      (Math.hypot(a1.x - b2.x, a1.y - b2.y) < 1) ||
+      (Math.hypot(a2.x - b1.x, a2.y - b1.y) < 1) ||
+      (Math.hypot(a2.x - b2.x, a2.y - b2.y) < 1)
+    );
+    if (shareEndpoint) return false; // Shared endpoints don't count as intersection
+
     const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
     const d1 = cross(b1, b2, a1), d2 = cross(b1, b2, a2);
     const d3 = cross(a1, a2, b1), d4 = cross(a1, a2, b2);
-    const eps = 0.01;
+    const eps = 0.1; // Increased tolerance
     return ((d1 > eps && d2 < -eps) || (d1 < -eps && d2 > eps)) &&
            ((d3 > eps && d4 < -eps) || (d3 < -eps && d4 > eps));
   }, []);
