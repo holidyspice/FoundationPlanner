@@ -2391,30 +2391,7 @@ export default function App() {
   // OVERLAP DETECTION
   // =====================================================
   const pointStrictlyInPolygon = useCallback((px, py, verts) => {
-    // Use a generous tolerance for boundary detection
-    const boundaryTolerance = EDGE_TOLERANCE * 3; // 6 units
-
-    // Check if point is near any vertex (shared vertices are OK)
-    for (const v of verts) {
-      if (Math.hypot(px - v.x, py - v.y) < boundaryTolerance) {
-        return false; // Near a vertex = not strictly inside (allows shared vertices)
-      }
-    }
-
-    // Check if point is near any edge (within tolerance)
-    for (let i = 0; i < verts.length; i++) {
-      const v1 = verts[i];
-      const v2 = verts[(i + 1) % verts.length];
-      const dx = v2.x - v1.x, dy = v2.y - v1.y;
-      const lenSq = dx * dx + dy * dy;
-      if (lenSq > 0.001) {
-        const t = Math.max(0, Math.min(1, ((px - v1.x) * dx + (py - v1.y) * dy) / lenSq));
-        const dist = Math.hypot(px - (v1.x + t * dx), py - (v1.y + t * dy));
-        if (dist < boundaryTolerance) return false; // Near edge = not strictly inside
-      }
-    }
-
-    // Ray casting for interior test - only flag as inside if clearly in the interior
+    // First, determine if point is inside using ray casting
     let inside = false;
     for (let i = 0, j = verts.length - 1; i < verts.length; j = i++) {
       const xi = verts[i].x, yi = verts[i].y;
@@ -2423,7 +2400,35 @@ export default function App() {
         inside = !inside;
       }
     }
-    return inside;
+
+    // If not inside by ray casting, definitely not inside
+    if (!inside) return false;
+
+    // Point is inside - but we allow points very close to the boundary (for edge-sharing)
+    const boundaryTolerance = EDGE_TOLERANCE; // 2 units (tight tolerance for true boundary)
+
+    // Check if point is very close to any vertex (shared vertices OK)
+    for (const v of verts) {
+      if (Math.hypot(px - v.x, py - v.y) < boundaryTolerance) {
+        return false; // On a shared vertex, allow
+      }
+    }
+
+    // Check if point is very close to any edge (shared edges OK)
+    for (let i = 0; i < verts.length; i++) {
+      const v1 = verts[i];
+      const v2 = verts[(i + 1) % verts.length];
+      const dx = v2.x - v1.x, dy = v2.y - v1.y;
+      const lenSq = dx * dx + dy * dy;
+      if (lenSq > 0.001) {
+        const t = Math.max(0, Math.min(1, ((px - v1.x) * dx + (py - v1.y) * dy) / lenSq));
+        const dist = Math.hypot(px - (v1.x + t * dx), py - (v1.y + t * dy));
+        if (dist < boundaryTolerance) return false; // On an edge, allow
+      }
+    }
+
+    // Point is clearly inside the polygon interior - this is an overlap
+    return true;
   }, []);
 
   const segmentsIntersect = useCallback((a1, a2, b1, b2) => {
@@ -2494,6 +2499,31 @@ export default function App() {
           const b2 = existingVerts[(j + 1) % existingVerts.length];
           if (segmentsIntersect(a1, a2, b1, b2)) return true;
         }
+      }
+
+      // Interior sampling: check if centroid of new shape is inside existing shape
+      // This catches overlaps where vertices land exactly on edges
+      if (pointStrictlyInPolygon(newCx, newCy, existingVerts)) return true;
+
+      // Check if centroid of existing shape is inside new shape
+      if (pointStrictlyInPolygon(existingCx, existingCy, newCollisionVerts)) return true;
+
+      // Sample edge midpoints of new shape to catch partial overlaps
+      for (let i = 0; i < newCollisionVerts.length; i++) {
+        const v1 = newCollisionVerts[i];
+        const v2 = newCollisionVerts[(i + 1) % newCollisionVerts.length];
+        const midX = (v1.x + v2.x) / 2;
+        const midY = (v1.y + v2.y) / 2;
+        if (pointStrictlyInPolygon(midX, midY, existingVerts)) return true;
+      }
+
+      // Sample edge midpoints of existing shape
+      for (let i = 0; i < existingVerts.length; i++) {
+        const v1 = existingVerts[i];
+        const v2 = existingVerts[(i + 1) % existingVerts.length];
+        const midX = (v1.x + v2.x) / 2;
+        const midY = (v1.y + v2.y) / 2;
+        if (pointStrictlyInPolygon(midX, midY, newCollisionVerts)) return true;
       }
     }
     return false;
