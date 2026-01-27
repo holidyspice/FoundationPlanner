@@ -2562,10 +2562,20 @@ export default function App() {
       const rawX = mouseX - itemDragOffset.x;
       const rawY = mouseY - itemDragOffset.y;
 
-      // Snap to tile centers (offset by half grid size so items center on tiles, not intersections)
-      const halfGrid = ITEM_GRID_SIZE / 2;
-      const newX = Math.round((rawX - halfGrid) / ITEM_GRID_SIZE) * ITEM_GRID_SIZE + halfGrid;
-      const newY = Math.round((rawY - halfGrid) / ITEM_GRID_SIZE) * ITEM_GRID_SIZE + halfGrid;
+      // Calculate grid offset based on existing shapes (so items align with tiles)
+      let gridOffsetX = 0, gridOffsetY = 0;
+      if (shapes.length > 0) {
+        const firstShape = shapes[0];
+        const verts = firstShape._verts || getVertices(firstShape);
+        const minX = Math.min(...verts.map(v => v.x));
+        const minY = Math.min(...verts.map(v => v.y));
+        gridOffsetX = minX % ITEM_GRID_SIZE;
+        gridOffsetY = minY % ITEM_GRID_SIZE;
+      }
+
+      // Snap to grid aligned with shape positions
+      const newX = Math.round((rawX - gridOffsetX) / ITEM_GRID_SIZE) * ITEM_GRID_SIZE + gridOffsetX;
+      const newY = Math.round((rawY - gridOffsetY) / ITEM_GRID_SIZE) * ITEM_GRID_SIZE + gridOffsetY;
 
       // Check fief boundary if enabled
       const item = placedItems.find(i => i.id === selectedItemId);
@@ -3822,10 +3832,21 @@ export default function App() {
     const rawX = (e.clientX - svgRect.left - pan.x) / zoom;
     const rawY = (e.clientY - svgRect.top - pan.y) / zoom;
 
-    // Snap to tile centers (offset by half grid size so items center on tiles, not intersections)
-    const halfGrid = ITEM_GRID_SIZE / 2;
-    const x = Math.round((rawX - halfGrid) / ITEM_GRID_SIZE) * ITEM_GRID_SIZE + halfGrid;
-    const y = Math.round((rawY - halfGrid) / ITEM_GRID_SIZE) * ITEM_GRID_SIZE + halfGrid;
+    // Calculate grid offset based on existing shapes (so items align with tiles)
+    let gridOffsetX = 0, gridOffsetY = 0;
+    if (shapes.length > 0) {
+      // Use first shape's corner position to determine grid offset
+      const firstShape = shapes[0];
+      const verts = firstShape._verts || getVertices(firstShape);
+      const minX = Math.min(...verts.map(v => v.x));
+      const minY = Math.min(...verts.map(v => v.y));
+      gridOffsetX = minX % ITEM_GRID_SIZE;
+      gridOffsetY = minY % ITEM_GRID_SIZE;
+    }
+
+    // Snap to grid aligned with shape positions (item top-left at tile corners)
+    const x = Math.round((rawX - gridOffsetX) / ITEM_GRID_SIZE) * ITEM_GRID_SIZE + gridOffsetX;
+    const y = Math.round((rawY - gridOffsetY) / ITEM_GRID_SIZE) * ITEM_GRID_SIZE + gridOffsetY;
 
     const itemDef = BASE_ITEMS[draggingItem];
     if (!itemDef) return;
@@ -3852,7 +3873,7 @@ export default function App() {
     saveToHistory();
     setPlacedItems(prev => [...prev, newItem]);
     setDraggingItem(null);
-  }, [draggingItem, pan, zoom, fiefMode, isItemInBuildableArea, doesItemOverlap, saveToHistory]);
+  }, [draggingItem, pan, zoom, fiefMode, isItemInBuildableArea, doesItemOverlap, saveToHistory, shapes, getVertices]);
 
   // Handle pattern drop from saved patterns panel
   const handlePatternDrop = useCallback((e) => {
