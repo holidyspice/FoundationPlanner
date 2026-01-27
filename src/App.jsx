@@ -2562,9 +2562,10 @@ export default function App() {
       const rawX = mouseX - itemDragOffset.x;
       const rawY = mouseY - itemDragOffset.y;
 
-      // Snap to grid
-      const newX = Math.round(rawX / ITEM_GRID_SIZE) * ITEM_GRID_SIZE;
-      const newY = Math.round(rawY / ITEM_GRID_SIZE) * ITEM_GRID_SIZE;
+      // Snap to tile centers (offset by half grid size so items center on tiles, not intersections)
+      const halfGrid = ITEM_GRID_SIZE / 2;
+      const newX = Math.round((rawX - halfGrid) / ITEM_GRID_SIZE) * ITEM_GRID_SIZE + halfGrid;
+      const newY = Math.round((rawY - halfGrid) / ITEM_GRID_SIZE) * ITEM_GRID_SIZE + halfGrid;
 
       // Check fief boundary if enabled
       const item = placedItems.find(i => i.id === selectedItemId);
@@ -3821,9 +3822,10 @@ export default function App() {
     const rawX = (e.clientX - svgRect.left - pan.x) / zoom;
     const rawY = (e.clientY - svgRect.top - pan.y) / zoom;
 
-    // Snap to grid
-    const x = Math.round(rawX / ITEM_GRID_SIZE) * ITEM_GRID_SIZE;
-    const y = Math.round(rawY / ITEM_GRID_SIZE) * ITEM_GRID_SIZE;
+    // Snap to tile centers (offset by half grid size so items center on tiles, not intersections)
+    const halfGrid = ITEM_GRID_SIZE / 2;
+    const x = Math.round((rawX - halfGrid) / ITEM_GRID_SIZE) * ITEM_GRID_SIZE + halfGrid;
+    const y = Math.round((rawY - halfGrid) / ITEM_GRID_SIZE) * ITEM_GRID_SIZE + halfGrid;
 
     const itemDef = BASE_ITEMS[draggingItem];
     if (!itemDef) return;
