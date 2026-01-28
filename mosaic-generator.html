@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dune Mosaic Generator</title>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #1e293b;
+      color: #e2e8f0;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 { color: #fbbf24; }
+    .controls {
+      background: #334155;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+    }
+    .controls label {
+      display: block;
+      margin: 10px 0 5px;
+    }
+    .controls input, .controls select {
+      padding: 8px;
+      border-radius: 4px;
+      border: 1px solid #475569;
+      background: #1e293b;
+      color: #e2e8f0;
+      width: 200px;
+    }
+    button {
+      background: #f59e0b;
+      color: #0f172a;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 15px;
+      margin-right: 10px;
+    }
+    button:hover { background: #fbbf24; }
+    button:disabled { background: #475569; cursor: not-allowed; }
+    .preview-container {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .preview-box {
+      background: #334155;
+      padding: 15px;
+      border-radius: 8px;
+    }
+    .preview-box h3 { margin-top: 0; color: #94a3b8; }
+    canvas {
+      max-width: 100%;
+      border: 2px solid #475569;
+      border-radius: 4px;
+    }
+    #output {
+      background: #0f172a;
+      padding: 15px;
+      border-radius: 8px;
+      margin-top: 20px;
+      max-height: 200px;
+      overflow-y: auto;
+      font-family: monospace;
+      font-size: 12px;
+    }
+    .stats {
+      background: #475569;
+      padding: 10px 15px;
+      border-radius: 6px;
+      margin-top: 15px;
+      display: inline-block;
+    }
+    .color-key {
+      display: flex;
+      gap: 20px;
+      margin-top: 15px;
+    }
+    .color-key div {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .color-swatch {
+      width: 20px;
+      height: 20px;
+      border-radius: 4px;
+      border: 1px solid #64748b;
+    }
+  </style>
+</head>
+<body>
+  <h1>Dune Mosaic Generator</h1>
+  <p>Convert any image into a mosaic pattern for the Dune Base Planner</p>
+
+  <div class="controls">
+    <label>Select Image:</label>
+    <input type="file" id="imageInput" accept="image/*">
+
+    <label>Resolution (tiles wide):</label>
+    <input type="number" id="resolution" value="80" min="20" max="200">
+
+    <label>Color Mapping:</label>
+    <select id="colorMode">
+      <option value="brightness">Brightness (3 tones)</option>
+      <option value="brightness5">Brightness (5 tones with shapes)</option>
+      <option value="color">Color-matched</option>
+    </select>
+
+    <div class="color-key">
+      <div><span class="color-swatch" style="background: #7c2d12;"></span> Harkonnen (dark)</div>
+      <div><span class="color-swatch" style="background: #1e40af;"></span> Atreides (mid)</div>
+      <div><span class="color-swatch" style="background: #b45309;"></span> Choam (light)</div>
+    </div>
+
+    <br>
+    <button id="generateBtn" disabled>Generate Mosaic</button>
+    <button id="downloadBtn" disabled>Download JSON File</button>
+    <button id="copyBtn" disabled>Copy to Clipboard</button>
+  </div>
+
+  <div class="preview-container">
+    <div class="preview-box">
+      <h3>Original Image</h3>
+      <canvas id="originalCanvas" width="400" height="300"></canvas>
+    </div>
+    <div class="preview-box">
+      <h3>Mosaic Preview</h3>
+      <canvas id="mosaicCanvas" width="400" height="300"></canvas>
+    </div>
+  </div>
+
+  <div class="stats" id="stats" style="display:none;"></div>
+
+  <div id="output"></div>
+
+  <script>
+    const imageInput = document.getElementById('imageInput');
+    const resolutionInput = document.getElementById('resolution');
+    const colorModeSelect = document.getElementById('colorMode');
+    const generateBtn = document.getElementById('generateBtn');
+    const copyBtn = document.getElementById('copyBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const originalCanvas = document.getElementById('originalCanvas');
+    const mosaicCanvas = document.getElementById('mosaicCanvas');
+    const outputDiv = document.getElementById('output');
+    const statsDiv = document.getElementById('stats');
+
+    const originalCtx = originalCanvas.getContext('2d');
+    const mosaicCtx = mosaicCanvas.getContext('2d');
+
+    let loadedImage = null;
+    let generatedData = null;
+
+    // Color schemes matching the app
+    const COLORS = {
+      harkonnen: { square: '#7c2d12', triangle: '#991b1b', corner: '#450a0a' },
+      atreides: { square: '#1e40af', triangle: '#1d4ed8', corner: '#1e3a8a' },
+      choam: { square: '#b45309', triangle: '#d97706', corner: '#92400e' }
+    };
+
+    imageInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          loadedImage = img;
+
+          // Draw original
+          const scale = Math.min(400 / img.width, 300 / img.height);
+          originalCanvas.width = img.width * scale;
+          originalCanvas.height = img.height * scale;
+          originalCtx.drawImage(img, 0, 0, originalCanvas.width, originalCanvas.height);
+
+          generateBtn.disabled = false;
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    generateBtn.addEventListener('click', generateMosaic);
+    copyBtn.addEventListener('click', copyToClipboard);
+    downloadBtn.addEventListener('click', downloadJSON);
+
+    function generateMosaic() {
+      if (!loadedImage) return;
+
+      const tilesWide = parseInt(resolutionInput.value);
+      const colorMode = colorModeSelect.value;
+
+      // Calculate dimensions
+      const aspectRatio = loadedImage.height / loadedImage.width;
+      const tilesHigh = Math.round(tilesWide * aspectRatio);
+      const tileSize = 50; // App's SHAPE_SIZE
+
+      // Create temporary canvas for pixel sampling
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = loadedImage.width;
+      tempCanvas.height = loadedImage.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.drawImage(loadedImage, 0, 0);
+      const imageData = tempCtx.getImageData(0, 0, loadedImage.width, loadedImage.height);
+
+      const shapes = [];
+      let id = 1;
+
+      // Sample each tile region
+      const pixelsPerTileX = loadedImage.width / tilesWide;
+      const pixelsPerTileY = loadedImage.height / tilesHigh;
+
+      for (let ty = 0; ty < tilesHigh; ty++) {
+        for (let tx = 0; tx < tilesWide; tx++) {
+          // Sample average color in this tile region
+          const startX = Math.floor(tx * pixelsPerTileX);
+          const startY = Math.floor(ty * pixelsPerTileY);
+          const endX = Math.floor((tx + 1) * pixelsPerTileX);
+          const endY = Math.floor((ty + 1) * pixelsPerTileY);
+
+          let r = 0, g = 0, b = 0, count = 0;
+          for (let py = startY; py < endY; py++) {
+            for (let px = startX; px < endX; px++) {
+              const idx = (py * loadedImage.width + px) * 4;
+              r += imageData.data[idx];
+              g += imageData.data[idx + 1];
+              b += imageData.data[idx + 2];
+              count++;
+            }
+          }
+          r = Math.round(r / count);
+          g = Math.round(g / count);
+          b = Math.round(b / count);
+
+          // Calculate brightness (0-255)
+          const brightness = (r * 0.299 + g * 0.587 + b * 0.114);
+
+          // Determine building type and shape based on color mode
+          let buildingType, shapeType;
+
+          if (colorMode === 'brightness') {
+            // 3-tone: dark/mid/light
+            if (brightness < 85) {
+              buildingType = 'harkonnen';
+            } else if (brightness < 170) {
+              buildingType = 'atreides';
+            } else {
+              buildingType = 'choam';
+            }
+            shapeType = 'square';
+          } else if (colorMode === 'brightness5') {
+            // 5-tone: use different shapes for more shades
+            if (brightness < 51) {
+              buildingType = 'harkonnen';
+              shapeType = 'square'; // darkest
+            } else if (brightness < 102) {
+              buildingType = 'harkonnen';
+              shapeType = 'triangle'; // dark
+            } else if (brightness < 153) {
+              buildingType = 'atreides';
+              shapeType = 'square'; // mid
+            } else if (brightness < 204) {
+              buildingType = 'choam';
+              shapeType = 'triangle'; // light
+            } else {
+              buildingType = 'choam';
+              shapeType = 'square'; // lightest
+            }
+          } else {
+            // Color-matched: try to match the actual color tone
+            const warmth = (r - b) / 255; // positive = warm, negative = cool
+
+            if (brightness < 100) {
+              buildingType = 'harkonnen'; // dark areas are Harkonnen
+            } else if (warmth > 0.1) {
+              buildingType = 'choam'; // warm tones are Choam (gold/sand)
+            } else {
+              buildingType = 'atreides'; // cool/neutral tones are Atreides
+            }
+            shapeType = 'square';
+          }
+
+          shapes.push({
+            id: id++,
+            type: shapeType,
+            x: tx * tileSize,
+            y: ty * tileSize,
+            rotation: 0,
+            buildingType: buildingType
+          });
+        }
+      }
+
+      generatedData = {
+        shapes: shapes,
+        placedItems: [],
+        width: tilesWide,
+        height: tilesHigh
+      };
+
+      // Draw mosaic preview
+      const previewScale = Math.min(400 / (tilesWide * tileSize), 300 / (tilesHigh * tileSize));
+      mosaicCanvas.width = tilesWide * tileSize * previewScale;
+      mosaicCanvas.height = tilesHigh * tileSize * previewScale;
+
+      mosaicCtx.fillStyle = '#1e293b';
+      mosaicCtx.fillRect(0, 0, mosaicCanvas.width, mosaicCanvas.height);
+
+      for (const shape of shapes) {
+        const color = COLORS[shape.buildingType][shape.type];
+        mosaicCtx.fillStyle = color;
+        const x = shape.x * previewScale;
+        const y = shape.y * previewScale;
+        const size = tileSize * previewScale;
+
+        if (shape.type === 'square') {
+          mosaicCtx.fillRect(x, y, size, size);
+        } else if (shape.type === 'triangle') {
+          mosaicCtx.beginPath();
+          mosaicCtx.moveTo(x, y + size);
+          mosaicCtx.lineTo(x + size / 2, y);
+          mosaicCtx.lineTo(x + size, y + size);
+          mosaicCtx.closePath();
+          mosaicCtx.fill();
+        }
+      }
+
+      // Update stats
+      statsDiv.style.display = 'block';
+      statsDiv.innerHTML = `
+        <strong>Generated:</strong> ${shapes.length} shapes |
+        ${tilesWide} x ${tilesHigh} tiles |
+        ${tilesWide * tileSize} x ${tilesHigh * tileSize} units
+      `;
+
+      // Show truncated output
+      const jsonStr = JSON.stringify(generatedData);
+      outputDiv.innerHTML = `<strong>JSON (${(jsonStr.length / 1024).toFixed(1)} KB):</strong><br>${jsonStr.substring(0, 500)}...`;
+
+      copyBtn.disabled = false;
+      downloadBtn.disabled = false;
+    }
+
+    function copyToClipboard() {
+      if (!generatedData) return;
+
+      const jsonStr = JSON.stringify(generatedData);
+      navigator.clipboard.writeText(jsonStr).then(() => {
+        alert('Copied to clipboard! Paste into your app or save as JSON.');
+      });
+    }
+
+    function downloadJSON() {
+      if (!generatedData) return;
+
+      const blob = new Blob([JSON.stringify(generatedData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mosaic-${generatedData.width}x${generatedData.height}-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>

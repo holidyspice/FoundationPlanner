@@ -3069,6 +3069,57 @@ export default function App() {
   };
   const handleResetView = () => { setZoom(1); setPan({ x: 0, y: 0 }); };
 
+  // Export current design as JSON file
+  const handleExportJSON = () => {
+    const data = {
+      shapes: shapes,
+      placedItems: placedItems,
+      buildingType: buildingType,
+      exportedAt: new Date().toISOString()
+    };
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `dune-design-${Date.now()}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // Import design from JSON file
+  const handleImportJSON = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        try {
+          const data = JSON.parse(event.target.result);
+          if (data.shapes && Array.isArray(data.shapes)) {
+            saveToHistory();
+            // Assign new IDs to avoid conflicts
+            const newShapes = data.shapes.map((s, i) => ({ ...s, id: Date.now() + i }));
+            setAllFloorShapes(prev => ({ ...prev, [currentFloor]: newShapes }));
+            if (data.placedItems && Array.isArray(data.placedItems)) {
+              const newItems = data.placedItems.map((item, i) => ({ ...item, id: Date.now() + 100000 + i }));
+              setAllFloorItems(prev => ({ ...prev, [currentFloor]: newItems }));
+            }
+            alert(`Imported ${newShapes.length} shapes successfully!`);
+          } else {
+            alert('Invalid JSON format. Expected { shapes: [...] }');
+          }
+        } catch (err) {
+          alert('Failed to parse JSON: ' + err.message);
+        }
+      };
+      reader.readAsText(file);
+    };
+    input.click();
+  };
+
 
   // =====================================================
   // STAKE HANDLERS
@@ -4110,6 +4161,24 @@ export default function App() {
           )}
 
           {/* Action buttons */}
+          <button onClick={handleImportJSON}
+            className="bg-emerald-600/80 hover:bg-emerald-500 text-white w-8 h-8 rounded text-sm transition-colors flex items-center justify-center"
+            title="Import JSON"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+            </svg>
+          </button>
+
+          <button onClick={handleExportJSON} disabled={shapes.length === 0}
+            className="bg-blue-600/80 hover:bg-blue-500 disabled:opacity-40 text-white w-8 h-8 rounded text-sm transition-colors flex items-center justify-center"
+            title="Export JSON"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+            </svg>
+          </button>
+
           <button onClick={handleClear} disabled={shapes.length === 0 && placedItems.length === 0 && !fiefMode}
             className="bg-red-600/80 hover:bg-red-500 disabled:opacity-40 text-white w-8 h-8 rounded text-sm transition-colors flex items-center justify-center"
             title="Clear all shapes, items, and fief"
